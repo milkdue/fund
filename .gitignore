@@ -1,0 +1,22 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+backend/fund_predictor.db
+
+# Android
+.gradle/
+**/build/
+local.properties
+.idea/
+*.iml
+
+# Env
+.env
+.env.local
+.env.production
+backend/.env
