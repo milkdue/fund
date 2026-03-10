@@ -138,3 +138,14 @@ def check_user_alerts(db: Session, *, user_id: str, limit: int = 20) -> list[dic
         if len(hits) >= limit:
             break
     return hits
+
+
+def list_alert_events(db: Session, *, user_id: str, limit: int = 50) -> list[AlertEvent]:
+    return list(
+        db.scalars(
+            select(AlertEvent)
+            .where(AlertEvent.user_id == user_id)
+            .order_by(AlertEvent.created_at.desc(), AlertEvent.id.desc())
+            .limit(max(1, min(limit, 200)))
+        )
+    )

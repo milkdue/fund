@@ -7,6 +7,7 @@ import com.leaf.fundpredictor.domain.model.AiJudgement
 import com.leaf.fundpredictor.domain.model.Explain
 import com.leaf.fundpredictor.domain.model.KlineCandle
 import com.leaf.fundpredictor.domain.model.Prediction
+import com.leaf.fundpredictor.domain.model.PredictionChange
 import com.leaf.fundpredictor.domain.model.Quote
 import com.leaf.fundpredictor.domain.repository.FundRepository
 import com.leaf.fundpredictor.domain.usecase.GetPredictionsUseCase
@@ -25,6 +26,7 @@ data class DetailUiState(
     val shortAi: AiJudgement? = null,
     val midAi: AiJudgement? = null,
     val explain: Explain? = null,
+    val shortChange: PredictionChange? = null,
     val kline: List<KlineCandle> = emptyList(),
     val notice: String? = null,
     val error: String? = null,
@@ -45,6 +47,7 @@ class DetailViewModel @Inject constructor(
             runCatching {
                 val (quote, shortPred, midPred) = useCase.execute(code)
                 val explain = useCase.explain(code)
+                val shortChange = runCatching { repository.getPredictionChange(code, "short") }.getOrNull()
                 val kline = repository.getKline(code, days = 60)
                 val shortAi = runCatching { repository.getAiJudgement(code, "short") }.getOrNull()
                 val midAi = runCatching { repository.getAiJudgement(code, "mid") }.getOrNull()
@@ -55,6 +58,7 @@ class DetailViewModel @Inject constructor(
                     shortAi = shortAi,
                     midAi = midAi,
                     explain = explain,
+                    shortChange = shortChange,
                     kline = kline,
                 )
             }.onSuccess {

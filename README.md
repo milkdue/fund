@@ -29,6 +29,7 @@
 - `GET /v1/user/alerts`
 - `POST /v1/user/alerts`
 - `GET /v1/user/alerts/check`
+- `GET /v1/user/alerts/events`
 - `POST /v1/user/events`
 - `GET /v1/user/weekly-report`
 - `GET /v1/model/health`
@@ -103,6 +104,13 @@ cd android
 - `FUND_GEMINI_PROMPT_VERSION=v1`
 - `FUND_GEMINI_DAILY_BUDGET_CALLS=400`
 - `FUND_GEMINI_COMPLIANCE_FILTER_ENABLED=true`
+- `FUND_BARK_ENABLED=false`
+- `FUND_BARK_BASE_URL=https://api.day.app`
+- `FUND_BARK_USER_KEY=<your-bark-user-key>`
+- `FUND_BARK_ICON_URL=<optional-icon-url>`
+- `FUND_BARK_GROUP=fund_predictor`
+- `FUND_BARK_LIMIT_PER_MIN=30`
+- `FUND_BARK_TIMEOUT_MS=5000`
 - `FUND_SOURCE_NAV_LIMIT_PER_MIN=90`
 - `FUND_SOURCE_SEARCH_LIMIT_PER_MIN=30`
 - `FUND_SOURCE_NEWS_LIMIT_PER_MIN=20`
@@ -132,6 +140,7 @@ cd android
 - 规则基线预测：基于最新日涨跌与20日波动生成 short/mid 概率与预期涨幅
 - AI 二级意见：`/v1/funds/{code}/ai-judgement`，输入量化+市场+舆情+回测上下文，Gemini 不可用时自动降级规则输出
 - AI 治理：支持每日调用预算上限与合规措辞过滤（检测确定性承诺词并自动降级）
+- 阈值推送：支持 Bark 推送（环境变量配置 `FUND_BARK_USER_KEY`，代码中不写入明文 key）
 - 舆情增强：每日抓取基金公告标题，进行关键词情绪与事件打分，参与预测修正
 - 风险提示增强：`explain` 返回风险标签（高波动、置信度偏低、舆情负面等）
 - 数据新鲜度：`quote/predict/explain` 返回 `data_freshness`（fresh/lagging/stale）

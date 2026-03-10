@@ -5,6 +5,7 @@ from app.models.entities import Fund, NewsSignalDaily, Prediction, Quote
 from app.services.market_context_service import get_or_refresh_market_context
 from app.services.fund_data_source import FundDataError, FundDataRateLimitError, fetch_latest_snapshot
 from app.services.alerts_service import evaluate_and_record_alert_events
+from app.services.alert_push_service import push_alert_event_to_bark
 from app.services.prediction_ab_service import upsert_ab_result
 from app.services.predictor import candidate_rule_predictions, rule_based_predictions
 from app.services.prediction_snapshot_service import upsert_prediction_snapshot
@@ -81,6 +82,7 @@ def refresh_fund_data(db: Session, code: str) -> Quote:
         market_degraded=market_ctx.source_degraded,
     )
     as_of = snapshot.as_of
+    created_alert_events = []
     for horizon, payload in pred_values.items():
         row = db.scalar(select(Prediction).where(Prediction.fund_code == code, Prediction.horizon == horizon, Prediction.as_of == as_of))
         if not row:
@@ -134,12 +136,19 @@ def refresh_fund_data(db: Session, code: str) -> Quote:
                 candidate_expected_return_pct=candidate["expected_return_pct"],
                 actual_return_pct=snapshot.daily_change_pct,
             )
-        evaluate_and_record_alert_events(
-            db,
-            fund_code=code,
-            horizon=horizon,
-            prediction_id=row.id,
+        created_alert_events.extend(
+            evaluate_and_record_alert_events(
+                db,
+                fund_code=code,
+                horizon=horizon,
+                prediction_id=row.id,
+            )
         )
 
     db.commit()
+    for event in created_alert_events:
+        try:
+            push_alert_event_to_bark(event)
+        except Exception:
+            continue
     return existing_quote

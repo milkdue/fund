@@ -48,6 +48,7 @@ import androidx.compose.ui.unit.dp
 import com.leaf.fundpredictor.domain.model.AiJudgement
 import com.leaf.fundpredictor.domain.model.KlineCandle
 import com.leaf.fundpredictor.domain.model.Prediction
+import com.leaf.fundpredictor.domain.model.PredictionChange
 import com.leaf.fundpredictor.domain.model.Quote
 import com.leaf.fundpredictor.presentation.components.ListSkeleton
 import com.leaf.fundpredictor.presentation.components.MotionReveal
@@ -145,6 +146,12 @@ fun DetailScreen(code: String, viewModel: DetailViewModel, onBack: () -> Unit) {
                 state.shortPred?.let { pred ->
                     MotionReveal(delayMs = 220) {
                         PredictionCard(title = "量化预测 (短期 1-7天)", prediction = pred)
+                    }
+                }
+
+                state.shortChange?.let { change ->
+                    MotionReveal(delayMs = 235) {
+                        PredictionChangeCard(change = change)
                     }
                 }
 
@@ -380,6 +387,10 @@ private fun PredictionCard(title: String, prediction: Prediction) {
                 "新鲜度: ${freshnessText(prediction.dataFreshness)}",
                 color = freshnessColor(prediction.dataFreshness),
             )
+            Text("模型: ${prediction.modelVersion} · 来源: ${prediction.dataSource}")
+            prediction.snapshotId?.let { snapshot ->
+                Text("快照ID: $snapshot", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
             Text("上涨概率: ${(prediction.upProbability * 100).toInt()}%")
             LinearProgressIndicator(
                 progress = { upProgress },
@@ -393,6 +404,88 @@ private fun PredictionCard(title: String, prediction: Prediction) {
                 modifier = Modifier.fillMaxWidth(),
                 color = Color(0xFF126A57),
             )
+        }
+    }
+}
+
+@Composable
+private fun PredictionChangeCard(change: PredictionChange) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF8EC)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
+    ) {
+        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("预测变化依据（相对上次）", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "新鲜度: ${freshnessText(change.dataFreshness)}",
+                color = freshnessColor(change.dataFreshness),
+            )
+            Text(change.summary)
+
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                MetricDeltaTile(
+                    modifier = Modifier.weight(1f),
+                    label = "概率变化",
+                    value = signedDelta(change.upProbabilityDelta * 100),
+                    valueColor = numberColor(change.upProbabilityDelta),
+                )
+                MetricDeltaTile(
+                    modifier = Modifier.weight(1f),
+                    label = "预期变化",
+                    value = signedDelta(change.expectedReturnPctDelta),
+                    valueColor = numberColor(change.expectedReturnPctDelta),
+                    suffix = "%",
+                )
+                MetricDeltaTile(
+                    modifier = Modifier.weight(1f),
+                    label = "置信变化",
+                    value = signedDelta(change.confidenceDelta * 100),
+                    valueColor = numberColor(change.confidenceDelta),
+                    suffix = "pt",
+                )
+            }
+
+            if (change.changedFactors.isNotEmpty()) {
+                Text("主要因子变化", style = MaterialTheme.typography.titleSmall)
+                change.changedFactors.take(5).forEach { factor ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text(factor.name, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            "${signedDelta(factor.delta)}",
+                            color = numberColor(factor.delta),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MetricDeltaTile(
+    modifier: Modifier = Modifier,
+    label: String,
+    value: String,
+    valueColor: Color,
+    suffix: String = "%",
+) {
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFFBF2)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("$value$suffix", style = MaterialTheme.typography.titleSmall, color = valueColor)
         }
     }
 }
@@ -517,6 +610,10 @@ private fun KlineCard(candles: List<KlineCandle>) {
 
 private fun signedPercent(v: Double): String {
     return if (v > 0) "+${String.format("%.2f", v)}%" else "${String.format("%.2f", v)}%"
+}
+
+private fun signedDelta(v: Double): String {
+    return if (v > 0) "+${String.format("%.2f", v)}" else String.format("%.2f", v)
 }
 
 private fun formatAsOf(raw: String): String {

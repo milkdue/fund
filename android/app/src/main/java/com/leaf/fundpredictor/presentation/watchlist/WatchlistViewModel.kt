@@ -3,6 +3,8 @@ package com.leaf.fundpredictor.presentation.watchlist
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.leaf.fundpredictor.domain.model.AlertEvent
+import com.leaf.fundpredictor.domain.model.WatchlistInsight
 import com.leaf.fundpredictor.domain.model.WatchlistItem
 import com.leaf.fundpredictor.domain.repository.FundRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -15,6 +17,9 @@ import kotlinx.coroutines.launch
 data class WatchlistUiState(
     val loading: Boolean = false,
     val items: List<WatchlistItem> = emptyList(),
+    val insights: List<WatchlistInsight> = emptyList(),
+    val alertEvents: List<AlertEvent> = emptyList(),
+    val diagnosticsNote: String? = null,
 )
 
 @HiltViewModel
@@ -27,12 +32,28 @@ class WatchlistViewModel @Inject constructor(
     fun load() {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(loading = true)
+            val insights = runCatching { repository.getWatchlistInsights() }
+                .onFailure { ex ->
+                    Log.e("WatchlistViewModel", "insights failed, type=${ex::class.java.simpleName}, msg=${ex.message}", ex)
+                }
+                .getOrDefault(emptyList())
             val rows = runCatching { repository.getWatchlist() }
                 .onFailure { ex ->
                     Log.e("WatchlistViewModel", "load failed, type=${ex::class.java.simpleName}, msg=${ex.message}", ex)
                 }
                 .getOrDefault(emptyList())
-            _uiState.value = _uiState.value.copy(loading = false, items = rows)
+            val events = runCatching { repository.getAlertEvents(limit = 30) }
+                .onFailure { ex ->
+                    Log.e("WatchlistViewModel", "events failed, type=${ex::class.java.simpleName}, msg=${ex.message}", ex)
+                }
+                .getOrDefault(emptyList())
+            _uiState.value = _uiState.value.copy(
+                loading = false,
+                items = rows,
+                insights = insights,
+                alertEvents = events,
+                diagnosticsNote = if (insights.isEmpty() && rows.isNotEmpty()) "洞察数据暂不可用，展示本地自选列表" else null,
+            )
         }
     }
 }

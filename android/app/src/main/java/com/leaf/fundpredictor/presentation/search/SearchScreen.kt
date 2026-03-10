@@ -41,6 +41,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.leaf.fundpredictor.domain.model.DataHealth
 import com.leaf.fundpredictor.domain.model.Fund
 import com.leaf.fundpredictor.presentation.components.ListSkeleton
 import com.leaf.fundpredictor.presentation.components.MotionReveal
@@ -92,6 +93,12 @@ fun SearchScreen(
             ) {
                 MotionReveal(delayMs = 40) {
                     HeroCard(itemCount = state.items.size, query = state.query)
+                }
+
+                state.dataHealth?.let { health ->
+                    MotionReveal(delayMs = 70) {
+                        SystemHealthCard(health = health)
+                    }
                 }
 
                 MotionReveal(delayMs = 110) {
@@ -233,6 +240,72 @@ private fun HeroCard(itemCount: Int, query: String) {
 }
 
 @Composable
+private fun SystemHealthCard(health: DataHealth) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text("系统数据健康", style = MaterialTheme.typography.titleMedium)
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                HealthTile(
+                    modifier = Modifier.weight(1f),
+                    label = "行情覆盖",
+                    value = "${(health.quoteCoverage48h * 100).toInt()}%",
+                    color = coverageColor(health.quoteCoverage48h),
+                )
+                HealthTile(
+                    modifier = Modifier.weight(1f),
+                    label = "预测覆盖",
+                    value = "${(health.predictionCoverage48h * 100).toInt()}%",
+                    color = coverageColor(health.predictionCoverage48h),
+                )
+                HealthTile(
+                    modifier = Modifier.weight(1f),
+                    label = "基金池",
+                    value = "${health.fundPoolSize}",
+                    color = Color(0xFF0C5B9F),
+                )
+            }
+            Text(
+                "新鲜度：行情 ${freshnessText(health.quoteFreshness)} / 预测 ${freshnessText(health.predictionFreshness)} / 市场 ${freshnessText(health.marketFreshness)}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun HealthTile(
+    modifier: Modifier = Modifier,
+    label: String,
+    value: String,
+    color: Color,
+) {
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(containerColor = color.copy(alpha = 0.1f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 7.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(value, style = MaterialTheme.typography.titleSmall, color = color)
+        }
+    }
+}
+
+@Composable
 private fun QuickChip(text: String, onClick: () -> Unit) {
     AssistChip(
         onClick = onClick,
@@ -296,5 +369,22 @@ private fun FundListItem(
                 tint = MaterialTheme.colorScheme.primary,
             )
         }
+    }
+}
+
+private fun coverageColor(value: Double): Color {
+    return when {
+        value >= 0.95 -> Color(0xFF0B8A43)
+        value >= 0.8 -> Color(0xFFB26A00)
+        else -> Color(0xFFC62828)
+    }
+}
+
+private fun freshnessText(value: String): String {
+    return when (value.lowercase()) {
+        "fresh" -> "新鲜"
+        "lagging" -> "一般"
+        "stale" -> "过期"
+        else -> "未知"
     }
 }

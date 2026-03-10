@@ -41,6 +41,10 @@ def test_watchlist_flow(client):
     assert get_rows.status_code == 200
     assert get_rows.json()[0]["fund_code"] == "110022"
 
+    events = client.get("/v1/user/alerts/events", headers=headers)
+    assert events.status_code == 200
+    assert isinstance(events.json(), list)
+
 
 def test_hot_and_data_sources(client):
     hot = client.get("/v1/funds/hot")

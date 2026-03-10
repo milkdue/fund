@@ -31,6 +31,9 @@ data class PredictionDto(
     @Json(name = "up_probability") val upProbability: Double,
     @Json(name = "expected_return_pct") val expectedReturnPct: Double,
     val confidence: Double,
+    @Json(name = "model_version") val modelVersion: String = "unknown",
+    @Json(name = "data_source") val dataSource: String = "rule_based",
+    @Json(name = "snapshot_id") val snapshotId: String? = null,
 )
 
 @JsonClass(generateAdapter = true)
@@ -86,6 +89,59 @@ data class WatchlistItemDto(
 )
 
 @JsonClass(generateAdapter = true)
+data class PredictionChangeFactorDto(
+    val name: String,
+    val before: Double? = null,
+    val after: Double? = null,
+    val delta: Double,
+)
+
+@JsonClass(generateAdapter = true)
+data class PredictionChangeDto(
+    val code: String,
+    val horizon: String,
+    @Json(name = "current_as_of") val currentAsOf: String,
+    @Json(name = "previous_as_of") val previousAsOf: String? = null,
+    @Json(name = "data_freshness") val dataFreshness: String,
+    @Json(name = "up_probability_delta") val upProbabilityDelta: Double,
+    @Json(name = "expected_return_pct_delta") val expectedReturnPctDelta: Double,
+    @Json(name = "confidence_delta") val confidenceDelta: Double,
+    @Json(name = "changed_factors") val changedFactors: List<PredictionChangeFactorDto>,
+    val summary: String,
+)
+
+@JsonClass(generateAdapter = true)
+data class WatchlistInsightDto(
+    @Json(name = "fund_code") val fundCode: String,
+    @Json(name = "short_up_probability") val shortUpProbability: Double? = null,
+    @Json(name = "short_confidence") val shortConfidence: Double? = null,
+    @Json(name = "mid_up_probability") val midUpProbability: Double? = null,
+    @Json(name = "mid_confidence") val midConfidence: Double? = null,
+    @Json(name = "data_freshness") val dataFreshness: String,
+    @Json(name = "risk_level") val riskLevel: String,
+    val signal: String,
+)
+
+@JsonClass(generateAdapter = true)
+data class WatchlistInsightsDto(
+    @Json(name = "user_id") val userId: String,
+    @Json(name = "generated_at") val generatedAt: String,
+    val items: List<WatchlistInsightDto>,
+)
+
+@JsonClass(generateAdapter = true)
+data class DataHealthDto(
+    @Json(name = "generated_at") val generatedAt: String,
+    @Json(name = "fund_pool_size") val fundPoolSize: Int,
+    @Json(name = "quote_coverage_48h") val quoteCoverage48h: Double,
+    @Json(name = "prediction_coverage_48h") val predictionCoverage48h: Double,
+    @Json(name = "quote_freshness") val quoteFreshness: String,
+    @Json(name = "prediction_freshness") val predictionFreshness: String,
+    @Json(name = "market_freshness") val marketFreshness: String,
+    @Json(name = "source_status") val sourceStatus: Map<String, String> = emptyMap(),
+)
+
+@JsonClass(generateAdapter = true)
 data class WatchlistAddRequest(@Json(name = "fund_code") val fundCode: String)
 
 @JsonClass(generateAdapter = true)
@@ -128,6 +184,15 @@ data class AlertRuleDto(
     val enabled: Boolean,
 )
 
+@JsonClass(generateAdapter = true)
+data class AlertEventDto(
+    val id: Long,
+    @Json(name = "fund_code") val fundCode: String,
+    val horizon: String,
+    val message: String,
+    @Json(name = "created_at") val createdAt: String,
+)
+
 interface FundApi {
     @GET("funds/search")
     suspend fun searchFunds(@Query("q") q: String): List<FundDto>
@@ -141,6 +206,9 @@ interface FundApi {
     @GET("funds/{code}/predict")
     suspend fun getPrediction(@Path("code") code: String, @Query("horizon") horizon: String): PredictionDto
 
+    @GET("funds/{code}/prediction-change")
+    suspend fun getPredictionChange(@Path("code") code: String, @Query("horizon") horizon: String): PredictionChangeDto
+
     @GET("funds/{code}/explain")
     suspend fun getExplain(@Path("code") code: String, @Query("horizon") horizon: String): ExplainDto
 
@@ -152,6 +220,12 @@ interface FundApi {
 
     @GET("user/watchlist")
     suspend fun getWatchlist(@Header("X-User-Id") userId: String = "demo-user"): List<WatchlistItemDto>
+
+    @GET("user/watchlist/insights")
+    suspend fun getWatchlistInsights(@Header("X-User-Id") userId: String = "demo-user"): WatchlistInsightsDto
+
+    @GET("system/data-health")
+    suspend fun getDataHealth(): DataHealthDto
 
     @POST("user/watchlist")
     suspend fun addWatchlist(
@@ -171,4 +245,10 @@ interface FundApi {
         @Body payload: AlertRuleRequest,
         @Header("X-User-Id") userId: String = "demo-user",
     ): AlertRuleDto
+
+    @GET("user/alerts/events")
+    suspend fun getAlertEvents(
+        @Query("limit") limit: Int = 30,
+        @Header("X-User-Id") userId: String = "demo-user",
+    ): List<AlertEventDto>
 }

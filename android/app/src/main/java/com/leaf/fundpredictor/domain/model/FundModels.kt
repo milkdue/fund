@@ -23,6 +23,9 @@ data class Prediction(
     val upProbability: Double,
     val expectedReturnPct: Double,
     val confidence: Double,
+    val modelVersion: String,
+    val dataSource: String,
+    val snapshotId: String?,
 )
 
 data class ExplainFactor(
@@ -67,4 +70,54 @@ data class KlineCandle(
 data class WatchlistItem(
     val userId: String,
     val fundCode: String,
+)
+
+data class PredictionChangeFactor(
+    val name: String,
+    val before: Double?,
+    val after: Double?,
+    val delta: Double,
+)
+
+data class PredictionChange(
+    val code: String,
+    val horizon: String,
+    val currentAsOf: String,
+    val previousAsOf: String?,
+    val dataFreshness: String,
+    val upProbabilityDelta: Double,
+    val expectedReturnPctDelta: Double,
+    val confidenceDelta: Double,
+    val changedFactors: List<PredictionChangeFactor>,
+    val summary: String,
+)
+
+data class WatchlistInsight(
+    val fundCode: String,
+    val shortUpProbability: Double?,
+    val shortConfidence: Double?,
+    val midUpProbability: Double?,
+    val midConfidence: Double?,
+    val dataFreshness: String,
+    val riskLevel: String,
+    val signal: String,
+)
+
+data class DataHealth(
+    val generatedAt: String,
+    val fundPoolSize: Int,
+    val quoteCoverage48h: Double,
+    val predictionCoverage48h: Double,
+    val quoteFreshness: String,
+    val predictionFreshness: String,
+    val marketFreshness: String,
+    val sourceStatus: Map<String, String>,
+)
+
+data class AlertEvent(
+    val id: Long,
+    val fundCode: String,
+    val horizon: String,
+    val message: String,
+    val createdAt: String,
 )

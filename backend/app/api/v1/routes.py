@@ -15,6 +15,7 @@ from app.schemas.fund import (
     AbSummaryResponse,
     AiJudgementResponse,
     AlertCheckResponse,
+    AlertEventItem,
     AlertHitItem,
     AlertRuleIn,
     AlertRuleItem,
@@ -46,7 +47,7 @@ from app.schemas.fund import (
     WalkForwardBacktestResponse,
     WeeklyReportResponse,
 )
-from app.services.alerts_service import check_user_alerts, list_alert_rules, upsert_alert_rule
+from app.services.alerts_service import check_user_alerts, list_alert_events, list_alert_rules, upsert_alert_rule
 from app.services.backtest_service import generate_backtest_report
 from app.services.data_health_service import build_data_health_summary
 from app.services.feedback_service import add_feedback, feedback_summary
@@ -769,6 +770,39 @@ def user_alerts_check(
         hit_count=len(hits),
         items=[AlertHitItem(**h) for h in hits],
     )
+
+
+@router.get("/user/alerts/events", response_model=list[AlertEventItem])
+def user_alert_events_get(
+    limit: int = Query(default=30, ge=1, le=200),
+    user_id: str = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    rows = list_alert_events(db, user_id=user_id, limit=limit)
+    _track_event_safe(
+        db,
+        user_id=user_id,
+        event_name="alerts_events_view",
+        metadata={"count": len(rows)},
+    )
+    _audit_safe(
+        db,
+        user_id=user_id,
+        endpoint="/v1/user/alerts/events",
+        method="GET",
+        status_code=200,
+        detail=f"count={len(rows)}",
+    )
+    return [
+        AlertEventItem(
+            id=row.id,
+            fund_code=row.fund_code,
+            horizon=row.horizon,
+            message=row.message,
+            created_at=row.created_at,
+        )
+        for row in rows
+    ]
 
 
 @router.post("/user/events", response_model=UserEventResponse)

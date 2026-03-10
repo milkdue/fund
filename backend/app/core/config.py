@@ -34,6 +34,13 @@ class Settings(BaseSettings):
     gemini_prompt_version: str = "v1"
     gemini_daily_budget_calls: int = 400
     gemini_compliance_filter_enabled: bool = True
+    bark_enabled: bool = False
+    bark_base_url: str = "https://api.day.app"
+    bark_user_key: str | None = None
+    bark_icon_url: str | None = None
+    bark_group: str = "fund_predictor"
+    bark_limit_per_min: int = 30
+    bark_timeout_ms: int = 5000
 
     model_config = SettingsConfigDict(env_prefix="FUND_", env_file=".env", extra="ignore")
 

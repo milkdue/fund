@@ -173,6 +173,14 @@ class AlertCheckResponse(BaseModel):
     items: list[AlertHitItem]
 
 
+class AlertEventItem(BaseModel):
+    id: int
+    fund_code: str
+    horizon: str
+    message: str
+    created_at: datetime
+
+
 class AbCompareItem(BaseModel):
     fund_code: str
     horizon: str

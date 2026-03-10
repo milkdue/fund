@@ -4,19 +4,27 @@ import com.leaf.fundpredictor.domain.model.Explain
 import com.leaf.fundpredictor.domain.model.Fund
 import com.leaf.fundpredictor.domain.model.KlineCandle
 import com.leaf.fundpredictor.domain.model.Prediction
+import com.leaf.fundpredictor.domain.model.PredictionChange
 import com.leaf.fundpredictor.domain.model.Quote
+import com.leaf.fundpredictor.domain.model.WatchlistInsight
 import com.leaf.fundpredictor.domain.model.WatchlistItem
 import com.leaf.fundpredictor.domain.model.AiJudgement
+import com.leaf.fundpredictor.domain.model.DataHealth
+import com.leaf.fundpredictor.domain.model.AlertEvent
 
 interface FundRepository {
     suspend fun searchFunds(query: String): List<Fund>
     suspend fun hotFunds(): List<Fund>
     suspend fun getQuote(code: String): Quote
     suspend fun getPrediction(code: String, horizon: String): Prediction
+    suspend fun getPredictionChange(code: String, horizon: String): PredictionChange
     suspend fun getExplain(code: String, horizon: String): Explain
     suspend fun getAiJudgement(code: String, horizon: String): AiJudgement
     suspend fun getKline(code: String, days: Int = 60): List<KlineCandle>
     suspend fun getWatchlist(): List<WatchlistItem>
+    suspend fun getWatchlistInsights(): List<WatchlistInsight>
+    suspend fun getDataHealth(): DataHealth
+    suspend fun getAlertEvents(limit: Int = 30): List<AlertEvent>
     suspend fun addWatchlist(code: String): WatchlistItem
     suspend fun submitFeedback(code: String, horizon: String, isHelpful: Boolean, score: Int = 3): Boolean
     suspend fun upsertDefaultAlert(code: String, horizon: String = "short"): Boolean

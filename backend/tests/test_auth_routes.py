@@ -40,6 +40,8 @@ def test_user_route_requires_auth_when_enabled(client):
         assert res.status_code == 401
         res2 = client.get("/v1/user/watchlist/insights")
         assert res2.status_code == 401
+        res_events = client.get("/v1/user/alerts/events")
+        assert res_events.status_code == 401
         res3 = client.post("/v1/user/events", json={"event_name": "app_open"})
         assert res3.status_code == 401
 
@@ -62,6 +64,12 @@ def test_user_route_accepts_valid_single_bearer(client):
             headers={"Authorization": "Bearer token-one", "X-User-Id": "tester-a"},
         )
         assert insights.status_code == 200
+
+        events = client.get(
+            "/v1/user/alerts/events",
+            headers={"Authorization": "Bearer token-one", "X-User-Id": "tester-a"},
+        )
+        assert events.status_code == 200
 
         event = client.post(
             "/v1/user/events",

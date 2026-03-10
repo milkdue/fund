@@ -7,12 +7,17 @@ import com.leaf.fundpredictor.data.remote.FeedbackRequest
 import com.leaf.fundpredictor.data.remote.FundApi
 import com.leaf.fundpredictor.data.remote.WatchlistAddRequest
 import com.leaf.fundpredictor.domain.model.AiJudgement
+import com.leaf.fundpredictor.domain.model.AlertEvent
+import com.leaf.fundpredictor.domain.model.DataHealth
 import com.leaf.fundpredictor.domain.model.Explain
 import com.leaf.fundpredictor.domain.model.ExplainFactor
 import com.leaf.fundpredictor.domain.model.Fund
 import com.leaf.fundpredictor.domain.model.KlineCandle
 import com.leaf.fundpredictor.domain.model.Prediction
+import com.leaf.fundpredictor.domain.model.PredictionChange
+import com.leaf.fundpredictor.domain.model.PredictionChangeFactor
 import com.leaf.fundpredictor.domain.model.Quote
+import com.leaf.fundpredictor.domain.model.WatchlistInsight
 import com.leaf.fundpredictor.domain.model.WatchlistItem
 import com.leaf.fundpredictor.domain.repository.FundRepository
 import javax.inject.Inject
@@ -45,6 +50,32 @@ class FundRepositoryImpl @Inject constructor(
             dto.upProbability,
             dto.expectedReturnPct,
             dto.confidence,
+            dto.modelVersion,
+            dto.dataSource,
+            dto.snapshotId,
+        )
+    }
+
+    override suspend fun getPredictionChange(code: String, horizon: String): PredictionChange {
+        val dto = api.getPredictionChange(code, horizon)
+        return PredictionChange(
+            code = dto.code,
+            horizon = dto.horizon,
+            currentAsOf = dto.currentAsOf,
+            previousAsOf = dto.previousAsOf,
+            dataFreshness = dto.dataFreshness,
+            upProbabilityDelta = dto.upProbabilityDelta,
+            expectedReturnPctDelta = dto.expectedReturnPctDelta,
+            confidenceDelta = dto.confidenceDelta,
+            changedFactors = dto.changedFactors.map {
+                PredictionChangeFactor(
+                    name = it.name,
+                    before = it.before,
+                    after = it.after,
+                    delta = it.delta,
+                )
+            },
+            summary = dto.summary,
         )
     }
 
@@ -101,6 +132,48 @@ class FundRepositoryImpl @Inject constructor(
             remote.map { WatchlistItem(it.userId, it.fundCode) }
         } catch (_: Exception) {
             watchlistDao.getAll().map { WatchlistItem(it.userId, it.fundCode) }
+        }
+    }
+
+    override suspend fun getWatchlistInsights(): List<WatchlistInsight> {
+        val dto = api.getWatchlistInsights()
+        return dto.items.map {
+            WatchlistInsight(
+                fundCode = it.fundCode,
+                shortUpProbability = it.shortUpProbability,
+                shortConfidence = it.shortConfidence,
+                midUpProbability = it.midUpProbability,
+                midConfidence = it.midConfidence,
+                dataFreshness = it.dataFreshness,
+                riskLevel = it.riskLevel,
+                signal = it.signal,
+            )
+        }
+    }
+
+    override suspend fun getDataHealth(): DataHealth {
+        val dto = api.getDataHealth()
+        return DataHealth(
+            generatedAt = dto.generatedAt,
+            fundPoolSize = dto.fundPoolSize,
+            quoteCoverage48h = dto.quoteCoverage48h,
+            predictionCoverage48h = dto.predictionCoverage48h,
+            quoteFreshness = dto.quoteFreshness,
+            predictionFreshness = dto.predictionFreshness,
+            marketFreshness = dto.marketFreshness,
+            sourceStatus = dto.sourceStatus,
+        )
+    }
+
+    override suspend fun getAlertEvents(limit: Int): List<AlertEvent> {
+        return api.getAlertEvents(limit = limit).map {
+            AlertEvent(
+                id = it.id,
+                fundCode = it.fundCode,
+                horizon = it.horizon,
+                message = it.message,
+                createdAt = it.createdAt,
+            )
         }
     }
 
