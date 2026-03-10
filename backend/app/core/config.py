@@ -9,6 +9,10 @@ class Settings(BaseSettings):
     auto_create_tables: bool = True
     bootstrap_demo_data: bool = False
     cron_secret: str | None = None
+    auth_enabled: bool = False
+    auth_bearer_token: str | None = None
+    auth_token_map: str | None = None
+    auth_default_user_id: str = "authorized-user"
     source_nav_limit_per_min: int = 90
     source_search_limit_per_min: int = 30
     source_news_limit_per_min: int = 20

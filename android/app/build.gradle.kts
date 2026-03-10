@@ -19,6 +19,7 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "API_BASE_URL", "\"https://fund.keyiqingxin.cn/v1/\"")
+        buildConfigField("String", "API_AUTH_BEARER_TOKEN", "\"\"")
     }
 
     buildTypes {

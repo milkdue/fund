@@ -2,16 +2,19 @@ package com.leaf.fundpredictor.presentation.nav
 
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.rounded.Home
+import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -48,7 +51,10 @@ fun FundNavGraph(
     Scaffold(
         bottomBar = {
             if (showBottomBar) {
-                NavigationBar {
+                NavigationBar(
+                    containerColor = Color(0xFFEAF1FF),
+                    tonalElevation = 4.dp,
+                ) {
                     NavigationBarItem(
                         selected = currentRoute == Route.Search,
                         onClick = {
@@ -58,8 +64,13 @@ fun FundNavGraph(
                                 popUpTo(Route.Search) { inclusive = false }
                             }
                         },
-                        icon = { Icon(Icons.Filled.Home, contentDescription = "首页") },
+                        icon = { Icon(Icons.Rounded.Home, contentDescription = "首页") },
                         label = { Text("首页") },
+                        colors = NavigationBarItemDefaults.colors(
+                            indicatorColor = Color(0xFFD8E8FF),
+                            selectedIconColor = Color(0xFF0C5B9F),
+                            selectedTextColor = Color(0xFF0C5B9F),
+                        ),
                     )
                     NavigationBarItem(
                         selected = currentRoute == Route.Watchlist,
@@ -69,8 +80,13 @@ fun FundNavGraph(
                                 restoreState = true
                             }
                         },
-                        icon = { Icon(Icons.Filled.Star, contentDescription = "自选") },
+                        icon = { Icon(Icons.Rounded.Star, contentDescription = "自选") },
                         label = { Text("自选") },
+                        colors = NavigationBarItemDefaults.colors(
+                            indicatorColor = Color(0xFFE6F7F1),
+                            selectedIconColor = Color(0xFF126A57),
+                            selectedTextColor = Color(0xFF126A57),
+                        ),
                     )
                 }
             }

@@ -77,6 +77,10 @@ cd android
 - `FUND_AUTO_CREATE_TABLES=true`
 - `FUND_BOOTSTRAP_DEMO_DATA=false`
 - `CRON_SECRET=<long-random-string>`（推荐，Vercel Cron 鉴权）
+- `FUND_AUTH_ENABLED=false`（开启后，用户态接口需 Bearer Token）
+- `FUND_AUTH_BEARER_TOKEN=<single-token>`
+- `FUND_AUTH_TOKEN_MAP=<token1:user1,token2:user2>`（可选，多用户映射；配置后优先）
+- `FUND_AUTH_DEFAULT_USER_ID=authorized-user`
 - `FUND_MODEL_SHORT_VERSION=short-v0.1`
 - `FUND_MODEL_MID_VERSION=mid-v0.1`
 - `FUND_MODEL_CANDIDATE_SHORT_VERSION=short-v0.2`
@@ -101,6 +105,8 @@ cd android
 - 数据库连接请使用 Neon 的 pooled 字符串。
 - 若连接串未带 `sslmode=require`，代码会自动补上。
 - 不要把 `.env`、`.env.local`、`.env.production` 推送到远程仓库（已在 `.gitignore`）。
+- 当 `FUND_AUTH_ENABLED=true` 时，以下接口需 `Authorization: Bearer <token>`：
+  `POST /v1/funds/{code}/feedback`、`/v1/user/watchlist*`、`/v1/user/alerts*`。
 
 ### 每日自动刷新（Vercel Cron）
 - 已在 `vercel.json` 配置：`0 2 * * *`（每天 UTC 02:00）

@@ -2,6 +2,20 @@
 
 Base path: `/v1`
 
+## Authentication (optional)
+- Default (`FUND_AUTH_ENABLED=false`): no bearer auth required.
+- When `FUND_AUTH_ENABLED=true`, these endpoints require `Authorization: Bearer <token>`:
+  - `POST /funds/{code}/feedback`
+  - `GET /user/watchlist`
+  - `POST /user/watchlist`
+  - `GET /user/alerts`
+  - `POST /user/alerts`
+  - `GET /user/alerts/check`
+- Public行情与模型查询接口保持匿名可访问（如 `search/quote/predict/explain/kline/news-signal/model/*/system/*`）。
+- Token 配置方式：
+  - 单 token：`FUND_AUTH_BEARER_TOKEN=<token>`
+  - 多 token 映射：`FUND_AUTH_TOKEN_MAP=token1:user1,token2:user2`（配置后优先）
+
 ## Error envelope
 ```json
 {

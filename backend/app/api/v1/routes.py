@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from sqlalchemy.orm import Session
 
+from app.core.auth import get_current_user_id
 from app.core.config import settings
 from app.db.session import get_db
 from app.schemas.fund import (
@@ -307,12 +308,12 @@ def fund_news_signal(code: str, db: Session = Depends(get_db)):
 def fund_feedback_post(
     code: str,
     payload: FeedbackIn,
-    x_user_id: str = Header(default="demo-user", alias="X-User-Id"),
+    user_id: str = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ):
     row = add_feedback(
         db,
-        user_id=x_user_id,
+        user_id=user_id,
         fund_code=code,
         horizon=payload.horizon,
         is_helpful=payload.is_helpful,
@@ -339,29 +340,29 @@ def fund_feedback_summary_get(code: str, horizon: str = Query(pattern="^(short|m
 
 @router.get("/user/watchlist", response_model=list[WatchlistItem])
 def watchlist_get(
-    x_user_id: str = Header(default="demo-user", alias="X-User-Id"),
+    user_id: str = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ):
-    rows = get_watchlist(db, x_user_id)
+    rows = get_watchlist(db, user_id)
     return [WatchlistItem(user_id=r.user_id, fund_code=r.fund_code) for r in rows]
 
 
 @router.post("/user/watchlist", response_model=WatchlistItem)
 def watchlist_post(
     payload: WatchlistIn,
-    x_user_id: str = Header(default="demo-user", alias="X-User-Id"),
+    user_id: str = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ):
-    row = add_watchlist(db, x_user_id, payload.fund_code)
+    row = add_watchlist(db, user_id, payload.fund_code)
     return WatchlistItem(user_id=row.user_id, fund_code=row.fund_code)
 
 
 @router.get("/user/alerts", response_model=list[AlertRuleItem])
 def user_alerts_get(
-    x_user_id: str = Header(default="demo-user", alias="X-User-Id"),
+    user_id: str = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ):
-    rows = list_alert_rules(db, user_id=x_user_id)
+    rows = list_alert_rules(db, user_id=user_id)
     return [
         AlertRuleItem(
             id=r.id,
@@ -381,12 +382,12 @@ def user_alerts_get(
 @router.post("/user/alerts", response_model=AlertRuleItem)
 def user_alerts_post(
     payload: AlertRuleIn,
-    x_user_id: str = Header(default="demo-user", alias="X-User-Id"),
+    user_id: str = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ):
     row = upsert_alert_rule(
         db,
-        user_id=x_user_id,
+        user_id=user_id,
         fund_code=payload.fund_code,
         horizon=payload.horizon,
         min_up_probability=payload.min_up_probability,
@@ -409,12 +410,12 @@ def user_alerts_post(
 
 @router.get("/user/alerts/check", response_model=AlertCheckResponse)
 def user_alerts_check(
-    x_user_id: str = Header(default="demo-user", alias="X-User-Id"),
+    user_id: str = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ):
-    hits = check_user_alerts(db, user_id=x_user_id, limit=20)
+    hits = check_user_alerts(db, user_id=user_id, limit=20)
     return AlertCheckResponse(
-        user_id=x_user_id,
+        user_id=user_id,
         hit_count=len(hits),
         items=[AlertHitItem(**h) for h in hits],
     )

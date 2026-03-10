@@ -32,7 +32,12 @@ fun ListSkeleton(rows: Int = 3) {
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         repeat(rows) {
-            Card {
+            Card(
+                colors = androidx.compose.material3.CardDefaults.cardColors(
+                    containerColor = androidx.compose.ui.graphics.Color(0xFFF1F5FB)
+                ),
+                elevation = androidx.compose.material3.CardDefaults.cardElevation(defaultElevation = 2.dp),
+            ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()

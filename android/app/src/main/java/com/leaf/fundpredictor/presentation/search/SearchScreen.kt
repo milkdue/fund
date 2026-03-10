@@ -1,32 +1,49 @@
 package com.leaf.fundpredictor.presentation.search
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.TrendingUp
+import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.QueryStats
+import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.leaf.fundpredictor.domain.model.Fund
 import com.leaf.fundpredictor.presentation.components.ListSkeleton
+import com.leaf.fundpredictor.presentation.components.MotionReveal
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -40,67 +57,244 @@ fun SearchScreen(
     LaunchedEffect(Unit) { viewModel.search() }
 
     Scaffold(
+        containerColor = Color.Transparent,
         topBar = {
             TopAppBar(
-                title = { Text(if (state.query.isBlank()) "热门基金" else "搜索结果", style = MaterialTheme.typography.titleLarge) }
+                title = {
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text("基金趋势仪表盘", style = MaterialTheme.typography.titleLarge)
+                        Text(
+                            "量化模型 + AI第二意见",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
             )
         }
     ) { innerPadding ->
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                OutlinedTextField(
-                    modifier = Modifier.weight(1f),
-                    value = state.query,
-                    onValueChange = viewModel::onQueryChange,
-                    label = { Text("基金代码 / 名称") },
-                    singleLine = true,
+                .background(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(Color(0xFFE9F3FF), Color(0xFFF6FFF9), Color(0xFFF4F7FD))
+                    )
                 )
-                Button(onClick = viewModel::search) { Text("搜索") }
-            }
-
-            Button(onClick = onOpenWatchlist, modifier = Modifier.fillMaxWidth()) {
-                Text("进入我的自选")
-            }
-
-            if (state.loading) {
-                ListSkeleton(rows = 4)
-            }
-
-            state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-
-            if (!state.loading && state.items.isEmpty()) {
-                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
-                    Text("暂无基金数据，请尝试其他关键词", modifier = Modifier.padding(14.dp), style = MaterialTheme.typography.bodyMedium)
+                .padding(innerPadding)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                MotionReveal(delayMs = 40) {
+                    HeroCard(itemCount = state.items.size, query = state.query)
                 }
-            }
 
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                items(state.items) { fund ->
+                MotionReveal(delayMs = 110) {
                     Card(
-                        modifier = Modifier.fillMaxWidth().clickable { onOpenDetail(fund.code) },
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
                     ) {
-                        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text(fund.name, style = MaterialTheme.typography.titleMedium)
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                Text("代码: ${fund.code}", style = MaterialTheme.typography.bodyMedium)
-                                AssistChip(onClick = {}, label = { Text(fund.category) })
+                                OutlinedTextField(
+                                    modifier = Modifier.weight(1f),
+                                    value = state.query,
+                                    onValueChange = viewModel::onQueryChange,
+                                    label = { Text("基金代码 / 名称") },
+                                    singleLine = true,
+                                    leadingIcon = {
+                                        Icon(Icons.Rounded.QueryStats, contentDescription = "search")
+                                    },
+                                )
+                                Button(onClick = viewModel::search) {
+                                    Text("搜索")
+                                }
+                            }
+
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                QuickChip("白酒") {
+                                    viewModel.onQueryChange("白酒")
+                                    viewModel.search()
+                                }
+                                QuickChip("消费") {
+                                    viewModel.onQueryChange("消费")
+                                    viewModel.search()
+                                }
+                                QuickChip("指数") {
+                                    viewModel.onQueryChange("指数")
+                                    viewModel.search()
+                                }
+                            }
+
+                            FilledTonalButton(onClick = onOpenWatchlist, modifier = Modifier.fillMaxWidth()) {
+                                Icon(Icons.Rounded.Star, contentDescription = "watchlist")
+                                Text("进入我的自选", modifier = Modifier.padding(start = 6.dp))
                             }
                         }
                     }
                 }
+
+                if (state.loading) {
+                    ListSkeleton(rows = 4)
+                }
+
+                state.error?.let {
+                    MotionReveal(delayMs = 130) {
+                        Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFFFEBEE))) {
+                            Text(
+                                text = it,
+                                color = Color(0xFFB71C1C),
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                            )
+                        }
+                    }
+                }
+
+                if (!state.loading && state.items.isEmpty()) {
+                    MotionReveal(delayMs = 150) {
+                        EmptyFundsCard()
+                    }
+                }
+
+                LazyColumn(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    itemsIndexed(state.items, key = { _, fund -> fund.code }) { index, fund ->
+                        MotionReveal(delayMs = 170 + (index.coerceAtMost(8) * 35)) {
+                            FundListItem(
+                                fund = fund,
+                                onClick = { onOpenDetail(fund.code) },
+                            )
+                        }
+                    }
+                }
             }
+        }
+    }
+}
+
+@Composable
+private fun HeroCard(itemCount: Int, query: String) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.large)
+            .background(
+                brush = Brush.horizontalGradient(
+                    colors = listOf(Color(0xFF0C5B9F), Color(0xFF1B7B63))
+                )
+            ),
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text("今日策略看板", style = MaterialTheme.typography.titleMedium, color = Color.White)
+            Text(
+                if (query.isBlank()) "当前展示热门基金候选，点击卡片进入详情。"
+                else "检索关键词：$query",
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color.White.copy(alpha = 0.92f),
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.AutoMirrored.Rounded.TrendingUp, contentDescription = "trend", tint = Color.White)
+                    Text(
+                        "共 $itemCount 条基金结果",
+                        color = Color.White,
+                        modifier = Modifier.padding(start = 6.dp),
+                    )
+                }
+                Text("MVP 内测版", color = Color.White.copy(alpha = 0.82f))
+            }
+        }
+    }
+}
+
+@Composable
+private fun QuickChip(text: String, onClick: () -> Unit) {
+    AssistChip(
+        onClick = onClick,
+        label = { Text(text) },
+        colors = AssistChipDefaults.assistChipColors(containerColor = Color(0xFFE7F1FF)),
+    )
+}
+
+@Composable
+private fun EmptyFundsCard() {
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+        Text(
+            "暂无基金数据，请尝试其他关键词",
+            modifier = Modifier.padding(14.dp),
+            style = MaterialTheme.typography.bodyMedium,
+        )
+    }
+}
+
+@Composable
+private fun FundListItem(
+    fund: Fund,
+    onClick: () -> Unit,
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color(0xFFE6F3FF))
+                    .padding(horizontal = 8.dp, vertical = 10.dp)
+            ) {
+                Text(fund.code.takeLast(3), color = Color(0xFF0C5B9F))
+            }
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(fund.name, style = MaterialTheme.typography.titleMedium)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("代码 ${fund.code}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    AssistChip(onClick = {}, label = { Text(fund.category) })
+                }
+            }
+            Icon(
+                imageVector = Icons.Rounded.ChevronRight,
+                contentDescription = "open",
+                tint = MaterialTheme.colorScheme.primary,
+            )
         }
     }
 }

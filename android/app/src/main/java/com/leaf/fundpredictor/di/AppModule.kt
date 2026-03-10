@@ -27,7 +27,18 @@ object NetworkModule {
     @Singleton
     fun provideOkHttpClient(): OkHttpClient {
         val logger = HttpLoggingInterceptor().apply { level = HttpLoggingInterceptor.Level.BASIC }
-        return OkHttpClient.Builder().addInterceptor(logger).build()
+        val authToken = BuildConfig.API_AUTH_BEARER_TOKEN.trim()
+        return OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                val original = chain.request()
+                val reqBuilder = original.newBuilder()
+                if (authToken.isNotEmpty() && original.header("Authorization").isNullOrBlank()) {
+                    reqBuilder.header("Authorization", "Bearer $authToken")
+                }
+                chain.proceed(reqBuilder.build())
+            }
+            .addInterceptor(logger)
+            .build()
     }
 
     @Provides
