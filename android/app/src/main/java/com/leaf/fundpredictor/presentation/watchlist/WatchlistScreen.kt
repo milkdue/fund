@@ -33,14 +33,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import com.leaf.fundpredictor.domain.model.AlertEvent
 import com.leaf.fundpredictor.domain.model.WatchlistInsight
 import com.leaf.fundpredictor.domain.model.WatchlistItem
 import com.leaf.fundpredictor.presentation.components.ListSkeleton
 import com.leaf.fundpredictor.presentation.components.MotionReveal
-import java.time.LocalDateTime
-import java.time.OffsetDateTime
-import java.time.format.DateTimeFormatter
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -111,13 +107,6 @@ fun WatchlistScreen(viewModel: WatchlistViewModel, onBack: () -> Unit) {
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    if (state.alertEvents.isNotEmpty()) {
-                        item {
-                            MotionReveal(delayMs = 125) {
-                                AlertEventsCard(items = state.alertEvents.take(6))
-                            }
-                        }
-                    }
                     if (state.insights.isNotEmpty()) {
                         itemsIndexed(state.insights, key = { _, item -> item.fundCode }) { index, item ->
                             MotionReveal(delayMs = 140 + (index.coerceAtMost(8) * 35)) {
@@ -161,34 +150,6 @@ private fun OverviewCard(size: Int) {
                     modifier = Modifier.padding(start = 6.dp),
                     color = Color.White.copy(alpha = 0.9f),
                 )
-            }
-        }
-    }
-}
-
-@Composable
-private fun AlertEventsCard(items: List<AlertEvent>) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFEFF6FF)),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(7.dp),
-        ) {
-            Text("推送列表（最近触发）", style = MaterialTheme.typography.titleMedium)
-            items.forEach { item ->
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(
-                        "${item.fundCode} · ${horizonText(item.horizon)} · ${formatEventTime(item.createdAt)}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Text(item.message, style = MaterialTheme.typography.bodyMedium)
-                }
             }
         }
     }
@@ -345,21 +306,4 @@ private fun freshnessColor(value: String): Color {
         "stale" -> Color(0xFFC62828)
         else -> Color(0xFF70757F)
     }
-}
-
-private fun horizonText(value: String): String {
-    return when (value.lowercase()) {
-        "short" -> "短期"
-        "mid" -> "中期"
-        else -> value
-    }
-}
-
-private fun formatEventTime(raw: String): String {
-    val fmt = DateTimeFormatter.ofPattern("MM-dd HH:mm")
-    return runCatching {
-        OffsetDateTime.parse(raw).format(fmt)
-    }.recoverCatching {
-        LocalDateTime.parse(raw).format(fmt)
-    }.getOrElse { raw }
 }

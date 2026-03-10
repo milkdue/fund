@@ -3,7 +3,6 @@ package com.leaf.fundpredictor.presentation.search
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.leaf.fundpredictor.domain.model.DataHealth
 import com.leaf.fundpredictor.domain.model.Fund
 import com.leaf.fundpredictor.domain.repository.FundRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -17,7 +16,6 @@ data class SearchUiState(
     val query: String = "",
     val items: List<Fund> = emptyList(),
     val loading: Boolean = false,
-    val dataHealth: DataHealth? = null,
     val error: String? = null,
 )
 
@@ -41,15 +39,9 @@ class SearchViewModel @Inject constructor(
                 if (query.isBlank()) repository.hotFunds() else repository.searchFunds(query)
             }
                 .onSuccess { funds ->
-                    val health = runCatching { repository.getDataHealth() }
-                        .onFailure { ex ->
-                            Log.w("SearchViewModel", "data health failed, type=${ex::class.java.simpleName}, msg=${ex.message}")
-                        }
-                        .getOrNull()
                     _uiState.value = _uiState.value.copy(
                         loading = false,
                         items = funds,
-                        dataHealth = health ?: _uiState.value.dataHealth,
                     )
                 }
                 .onFailure { ex ->

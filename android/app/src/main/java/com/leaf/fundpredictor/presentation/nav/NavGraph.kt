@@ -3,6 +3,8 @@ package com.leaf.fundpredictor.presentation.nav
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Home
+import androidx.compose.material.icons.rounded.NotificationsActive
+import androidx.compose.material.icons.rounded.QueryStats
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
@@ -22,8 +24,12 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.leaf.fundpredictor.presentation.alerts.AlertsScreen
+import com.leaf.fundpredictor.presentation.alerts.AlertsViewModel
 import com.leaf.fundpredictor.presentation.detail.DetailScreen
 import com.leaf.fundpredictor.presentation.detail.DetailViewModel
+import com.leaf.fundpredictor.presentation.home.HomeScreen
+import com.leaf.fundpredictor.presentation.home.HomeViewModel
 import com.leaf.fundpredictor.presentation.risk.RiskScreen
 import com.leaf.fundpredictor.presentation.search.SearchScreen
 import com.leaf.fundpredictor.presentation.search.SearchViewModel
@@ -32,7 +38,9 @@ import com.leaf.fundpredictor.presentation.watchlist.WatchlistViewModel
 
 private object Route {
     const val Risk = "risk"
+    const val Home = "home"
     const val Search = "search"
+    const val Alerts = "alerts"
     const val Watchlist = "watchlist"
     const val Detail = "detail/{code}"
 }
@@ -43,10 +51,20 @@ fun FundNavGraph(
     onRiskAccepted: () -> Unit,
 ) {
     val navController = rememberNavController()
-    val startDestination = if (riskAccepted) Route.Search else Route.Risk
+    val startDestination = if (riskAccepted) Route.Home else Route.Risk
     val backStack by navController.currentBackStackEntryAsState()
     val currentRoute = backStack?.destination?.route.orEmpty()
-    val showBottomBar = currentRoute == Route.Search || currentRoute == Route.Watchlist
+    val showBottomBar = currentRoute == Route.Home || currentRoute == Route.Search || currentRoute == Route.Alerts || currentRoute == Route.Watchlist
+
+    fun navigateTab(route: String) {
+        navController.navigate(route) {
+            launchSingleTop = true
+            restoreState = true
+            popUpTo(Route.Home) {
+                saveState = true
+            }
+        }
+    }
 
     Scaffold(
         bottomBar = {
@@ -56,13 +74,9 @@ fun FundNavGraph(
                     tonalElevation = 4.dp,
                 ) {
                     NavigationBarItem(
-                        selected = currentRoute == Route.Search,
+                        selected = currentRoute == Route.Home,
                         onClick = {
-                            navController.navigate(Route.Search) {
-                                launchSingleTop = true
-                                restoreState = true
-                                popUpTo(Route.Search) { inclusive = false }
-                            }
+                            navigateTab(Route.Home)
                         },
                         icon = { Icon(Icons.Rounded.Home, contentDescription = "首页") },
                         label = { Text("首页") },
@@ -73,12 +87,22 @@ fun FundNavGraph(
                         ),
                     )
                     NavigationBarItem(
+                        selected = currentRoute == Route.Search,
+                        onClick = {
+                            navigateTab(Route.Search)
+                        },
+                        icon = { Icon(Icons.Rounded.QueryStats, contentDescription = "搜索") },
+                        label = { Text("搜索") },
+                        colors = NavigationBarItemDefaults.colors(
+                            indicatorColor = Color(0xFFD8E8FF),
+                            selectedIconColor = Color(0xFF0C5B9F),
+                            selectedTextColor = Color(0xFF0C5B9F),
+                        ),
+                    )
+                    NavigationBarItem(
                         selected = currentRoute == Route.Watchlist,
                         onClick = {
-                            navController.navigate(Route.Watchlist) {
-                                launchSingleTop = true
-                                restoreState = true
-                            }
+                            navigateTab(Route.Watchlist)
                         },
                         icon = { Icon(Icons.Rounded.Star, contentDescription = "自选") },
                         label = { Text("自选") },
@@ -86,6 +110,19 @@ fun FundNavGraph(
                             indicatorColor = Color(0xFFE6F7F1),
                             selectedIconColor = Color(0xFF126A57),
                             selectedTextColor = Color(0xFF126A57),
+                        ),
+                    )
+                    NavigationBarItem(
+                        selected = currentRoute == Route.Alerts,
+                        onClick = {
+                            navigateTab(Route.Alerts)
+                        },
+                        icon = { Icon(Icons.Rounded.NotificationsActive, contentDescription = "推送") },
+                        label = { Text("推送") },
+                        colors = NavigationBarItemDefaults.colors(
+                            indicatorColor = Color(0xFFE7F2FF),
+                            selectedIconColor = Color(0xFF0C5B9F),
+                            selectedTextColor = Color(0xFF0C5B9F),
                         ),
                     )
                 }
@@ -101,10 +138,20 @@ fun FundNavGraph(
                 RiskScreen(
                     onAgree = {
                         onRiskAccepted()
-                        navController.navigate(Route.Search) {
+                        navController.navigate(Route.Home) {
                             popUpTo(Route.Risk) { inclusive = true }
                         }
                     }
+                )
+            }
+
+            composable(Route.Home) {
+                val vm: HomeViewModel = hiltViewModel()
+                HomeScreen(
+                    viewModel = vm,
+                    onOpenSearch = { navigateTab(Route.Search) },
+                    onOpenWatchlist = { navigateTab(Route.Watchlist) },
+                    onOpenAlerts = { navigateTab(Route.Alerts) },
                 )
             }
 
@@ -113,7 +160,6 @@ fun FundNavGraph(
                 SearchScreen(
                     viewModel = vm,
                     onOpenDetail = { code -> navController.navigate("detail/$code") },
-                    onOpenWatchlist = { navController.navigate(Route.Watchlist) },
                 )
             }
 
@@ -131,7 +177,12 @@ fun FundNavGraph(
 
             composable(Route.Watchlist) {
                 val vm: WatchlistViewModel = hiltViewModel()
-                WatchlistScreen(viewModel = vm, onBack = { navController.navigate(Route.Search) })
+                WatchlistScreen(viewModel = vm, onBack = { navigateTab(Route.Home) })
+            }
+
+            composable(Route.Alerts) {
+                val vm: AlertsViewModel = hiltViewModel()
+                AlertsScreen(viewModel = vm)
             }
         }
     }

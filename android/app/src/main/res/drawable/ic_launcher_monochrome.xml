@@ -7,5 +7,17 @@
 
     <path
         android:fillColor="#111827"
-        android:pathData="M24,20h60c6.6,0 12,5.4 12,12v44c0,6.6 -5.4,12 -12,12h-60c-6.6,0 -12,-5.4 -12,-12v-44c0,-6.6 5.4,-12 12,-12zM28,68h8v10h-8zM44,58h8v20h-8zM60,48h8v30h-8zM26,58l16,-14 12,10 24,-20v8h8v-22h-22v8h10l-20,17 -12,-10 -20,17zM73,71c6.8,-1.2 12.8,4.2 11.6,11 -6.8,1.2 -12.8,-4.2 -11.6,-11z" />
+        android:pathData="M20,18h68c6.6,0 12,5.4 12,12v48c0,6.6 -5.4,12 -12,12h-68c-6.6,0 -12,-5.4 -12,-12v-48c0,-6.6 5.4,-12 12,-12z" />
+
+    <path
+        android:fillColor="#111827"
+        android:pathData="M34,34h2v38h-2zM50,28h2v42h-2zM66,24h2v40h-2zM31,46h8v14h-8zM47,40h8v16h-8zM63,34h8v12h-8zM80,44l10,2 -7,7z" />
+
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M22,74L38,58 52,63 70,45 84,51"
+        android:strokeColor="#111827"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="3.2" />
 </vector>
