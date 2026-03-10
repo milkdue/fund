@@ -1,5 +1,5 @@
 from app.services.news_sentiment import aggregate_scores, score_headline, volume_shock
-from app.services.predictor import explain_features, rule_based_predictions
+from app.services.predictor import build_risk_flags, explain_features, rule_based_predictions
 
 
 def test_score_headline_detects_positive_and_event():
@@ -40,3 +40,15 @@ def test_news_factor_changes_prediction_and_explain():
     names = [f.name for f in factors]
     assert "舆情情绪分" in names
     assert "公告事件冲击" in names
+
+
+def test_build_risk_flags():
+    flags = build_risk_flags(
+        volatility_20d=2.9,
+        confidence=0.42,
+        sentiment_score=-0.4,
+        event_score=-0.3,
+        volume_shock_score=1.1,
+    )
+    assert "高波动风险" in flags
+    assert "置信度偏低" in flags

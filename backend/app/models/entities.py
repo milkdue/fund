@@ -78,3 +78,102 @@ class NewsSignalDaily(Base):
     volume_shock: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     sample_title: Mapped[str] = mapped_column(String(256), nullable=False, default="暂无新增公告/舆情")
     updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class ModelBacktestReport(Base):
+    __tablename__ = "model_backtest_reports"
+    __table_args__ = (UniqueConstraint("horizon", "report_date", name="uq_backtest_horizon_report_date"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    horizon: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
+    report_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    generated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow, index=True)
+    window_days: Mapped[int] = mapped_column(Integer, nullable=False, default=180)
+    model_version: Mapped[str] = mapped_column(String(64), nullable=False, default="unknown")
+    accuracy: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    auc: Mapped[float] = mapped_column(Float, nullable=False, default=0.5)
+    precision: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    recall: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    f1: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    annualized_return: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    max_drawdown: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    sharpe: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    sample_size: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
+class MarketIndexDaily(Base):
+    __tablename__ = "market_index_daily"
+    __table_args__ = (UniqueConstraint("index_code", "as_of", name="uq_market_index_code_as_of"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    index_code: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
+    index_name: Mapped[str] = mapped_column(String(64), nullable=False)
+    as_of: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
+    close: Mapped[float] = mapped_column(Float, nullable=False)
+    daily_change_pct: Mapped[float] = mapped_column(Float, nullable=False)
+    volatility_20d: Mapped[float] = mapped_column(Float, nullable=False)
+    momentum_5d: Mapped[float] = mapped_column(Float, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+
+
+class PredictionFeedback(Base):
+    __tablename__ = "prediction_feedback"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    fund_code: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
+    horizon: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
+    is_helpful: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    score: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    comment: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    pred_as_of: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow, index=True)
+
+
+class AlertRule(Base):
+    __tablename__ = "alert_rules"
+    __table_args__ = (UniqueConstraint("user_id", "fund_code", "horizon", name="uq_alert_rule_user_fund_horizon"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    fund_code: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
+    horizon: Mapped[str] = mapped_column(String(16), nullable=False, default="short", index=True)
+    min_up_probability: Mapped[float] = mapped_column(Float, nullable=False, default=0.6)
+    min_confidence: Mapped[float] = mapped_column(Float, nullable=False, default=0.55)
+    min_expected_return_pct: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    enabled: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class AlertEvent(Base):
+    __tablename__ = "alert_events"
+    __table_args__ = (UniqueConstraint("rule_id", "prediction_id", name="uq_alert_event_rule_prediction"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    rule_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    prediction_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    user_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    fund_code: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
+    horizon: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
+    message: Mapped[str] = mapped_column(String(256), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow, index=True)
+
+
+class PredictionABResult(Base):
+    __tablename__ = "prediction_ab_results"
+    __table_args__ = (UniqueConstraint("fund_code", "horizon", "as_of", "candidate_model_version", name="uq_ab_fund_horizon_as_of_candidate"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    fund_code: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
+    horizon: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
+    as_of: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
+    baseline_model_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    candidate_model_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    baseline_up_probability: Mapped[float] = mapped_column(Float, nullable=False)
+    candidate_up_probability: Mapped[float] = mapped_column(Float, nullable=False)
+    baseline_expected_return_pct: Mapped[float] = mapped_column(Float, nullable=False)
+    candidate_expected_return_pct: Mapped[float] = mapped_column(Float, nullable=False)
+    actual_return_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    winner: Mapped[str] = mapped_column(String(16), nullable=False, default="tie")
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)

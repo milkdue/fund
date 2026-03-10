@@ -8,6 +8,8 @@ data class Fund(
 
 data class Quote(
     val code: String,
+    val asOf: String,
+    val dataFreshness: String,
     val nav: Double,
     val dailyChangePct: Double,
     val volatility20d: Double,
@@ -16,6 +18,8 @@ data class Quote(
 data class Prediction(
     val code: String,
     val horizon: String,
+    val asOf: String,
+    val dataFreshness: String,
     val upProbability: Double,
     val expectedReturnPct: Double,
     val confidence: Double,
@@ -29,8 +33,10 @@ data class ExplainFactor(
 data class Explain(
     val code: String,
     val horizon: String,
+    val dataFreshness: String,
     val confidenceIntervalPct: Pair<Double, Double>,
     val topFactors: List<ExplainFactor>,
+    val riskFlags: List<String>,
 )
 
 data class KlineCandle(

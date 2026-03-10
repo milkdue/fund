@@ -9,6 +9,10 @@
     {
       "path": "/v1/internal/cron/daily-refresh",
       "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/v1/internal/cron/weekly-backtest",
+      "schedule": "0 3 * * 1"
     }
   ],
   "routes": [

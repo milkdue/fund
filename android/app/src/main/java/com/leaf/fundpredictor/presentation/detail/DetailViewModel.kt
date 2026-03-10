@@ -23,6 +23,7 @@ data class DetailUiState(
     val midPred: Prediction? = null,
     val explain: Explain? = null,
     val kline: List<KlineCandle> = emptyList(),
+    val notice: String? = null,
     val error: String? = null,
 )
 
@@ -61,9 +62,38 @@ class DetailViewModel @Inject constructor(
     fun addWatchlist(code: String) {
         viewModelScope.launch {
             runCatching { repository.addWatchlist(code) }
+                .onSuccess {
+                    _uiState.value = _uiState.value.copy(notice = "已加入自选")
+                }
                 .onFailure { ex ->
                     Log.e("DetailViewModel", "add watchlist failed, code=$code, type=${ex::class.java.simpleName}, msg=${ex.message}", ex)
                     _uiState.value = _uiState.value.copy(error = "加入自选失败")
+                }
+        }
+    }
+
+    fun submitFeedback(code: String, horizon: String, isHelpful: Boolean) {
+        viewModelScope.launch {
+            runCatching { repository.submitFeedback(code, horizon, isHelpful, if (isHelpful) 5 else 2) }
+                .onSuccess {
+                    _uiState.value = _uiState.value.copy(notice = "反馈已提交")
+                }
+                .onFailure { ex ->
+                    Log.e("DetailViewModel", "feedback failed, code=$code, type=${ex::class.java.simpleName}, msg=${ex.message}", ex)
+                    _uiState.value = _uiState.value.copy(error = "反馈提交失败")
+                }
+        }
+    }
+
+    fun setDefaultAlert(code: String, horizon: String = "short") {
+        viewModelScope.launch {
+            runCatching { repository.upsertDefaultAlert(code, horizon) }
+                .onSuccess {
+                    _uiState.value = _uiState.value.copy(notice = "已添加提醒阈值")
+                }
+                .onFailure { ex ->
+                    Log.e("DetailViewModel", "alert upsert failed, code=$code, type=${ex::class.java.simpleName}, msg=${ex.message}", ex)
+                    _uiState.value = _uiState.value.copy(error = "提醒设置失败")
                 }
         }
     }

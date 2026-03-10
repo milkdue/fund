@@ -16,45 +16,140 @@ def _news_impact(
     return sentiment_score * 2.00 + event_score * 1.20 + volume_shock_score * 0.15
 
 
+def _market_impact(market_score: float, style_score: float, horizon: str) -> float:
+    if horizon == "short":
+        return market_score * 0.85 + style_score * 0.25
+    return market_score * 1.65 + style_score * 0.45
+
+
+def calibrate_probability(raw_probability: float, horizon: str, market_score: float = 0.0) -> float:
+    centered = raw_probability - 0.5
+    if horizon == "short":
+        calibrated = 0.5 + centered * 0.92 + market_score * 0.012
+    else:
+        calibrated = 0.5 + centered * 0.88 + market_score * 0.016
+    return round(_clamp(calibrated, 0.05, 0.95), 4)
+
+
+def _compute_prediction_payload(
+    *,
+    horizon: str,
+    base_expected: float,
+    volatility_20d: float,
+    sentiment_score: float,
+    event_score: float,
+    volume_shock_score: float,
+    market_score: float,
+    style_score: float,
+    market_degraded: bool,
+    expected_scale: float,
+) -> dict[str, float]:
+    expected_return = (base_expected + _news_impact(sentiment_score, event_score, volume_shock_score, horizon) + _market_impact(market_score, style_score, horizon)) * expected_scale
+
+    raw_probability = _clamp(
+        0.5 + expected_return / (20.0 if horizon == "short" else 30.0),
+        0.05,
+        0.95,
+    )
+    up_probability = calibrate_probability(raw_probability, horizon, market_score=market_score)
+
+    base_conf = 0.78 if horizon == "short" else 0.72
+    vol_div = 18.0 if horizon == "short" else 22.0
+    event_bonus = abs(event_score) * (0.05 if horizon == "short" else 0.04)
+    shock_penalty = abs(volume_shock_score) * (0.02 if horizon == "short" else 0.01)
+    market_penalty = 0.08 if market_degraded else 0.0
+
+    confidence = _clamp(base_conf - volatility_20d / vol_div + event_bonus - shock_penalty - market_penalty, 0.30, 0.88)
+    return {
+        "up_probability": round(up_probability, 4),
+        "expected_return_pct": round(expected_return, 2),
+        "confidence": round(confidence, 4),
+    }
+
+
 def rule_based_predictions(
     daily_change_pct: float,
     volatility_20d: float,
     sentiment_score: float = 0.0,
     event_score: float = 0.0,
     volume_shock_score: float = 0.0,
+    market_score: float = 0.0,
+    style_score: float = 0.0,
+    market_degraded: bool = False,
 ) -> dict[str, dict[str, float]]:
-    # Baseline momentum + volatility model, then corrected by news sentiment/event factors.
+    # Baseline momentum + volatility model, then corrected by news and market factors.
     short_base = daily_change_pct * 1.6 - volatility_20d * 0.1
     mid_base = daily_change_pct * 3.8 - volatility_20d * 0.18
 
-    short_expected = short_base + _news_impact(sentiment_score, event_score, volume_shock_score, "short")
-    mid_expected = mid_base + _news_impact(sentiment_score, event_score, volume_shock_score, "mid")
-
-    short_prob = _clamp(0.5 + short_expected / 20.0, 0.05, 0.95)
-    mid_prob = _clamp(0.5 + mid_expected / 30.0, 0.05, 0.95)
-
-    short_conf = _clamp(
-        0.78 - volatility_20d / 18.0 + abs(event_score) * 0.05 - abs(volume_shock_score) * 0.02,
-        0.35,
-        0.88,
+    short_payload = _compute_prediction_payload(
+        horizon="short",
+        base_expected=short_base,
+        volatility_20d=volatility_20d,
+        sentiment_score=sentiment_score,
+        event_score=event_score,
+        volume_shock_score=volume_shock_score,
+        market_score=market_score,
+        style_score=style_score,
+        market_degraded=market_degraded,
+        expected_scale=1.0,
     )
-    mid_conf = _clamp(
-        0.72 - volatility_20d / 22.0 + abs(event_score) * 0.04 - abs(volume_shock_score) * 0.01,
-        0.30,
-        0.84,
+    mid_payload = _compute_prediction_payload(
+        horizon="mid",
+        base_expected=mid_base,
+        volatility_20d=volatility_20d,
+        sentiment_score=sentiment_score,
+        event_score=event_score,
+        volume_shock_score=volume_shock_score,
+        market_score=market_score,
+        style_score=style_score,
+        market_degraded=market_degraded,
+        expected_scale=1.0,
     )
 
     return {
-        "short": {
-            "up_probability": round(short_prob, 4),
-            "expected_return_pct": round(short_expected, 2),
-            "confidence": round(short_conf, 4),
-        },
-        "mid": {
-            "up_probability": round(mid_prob, 4),
-            "expected_return_pct": round(mid_expected, 2),
-            "confidence": round(mid_conf, 4),
-        },
+        "short": short_payload,
+        "mid": mid_payload,
+    }
+
+
+def candidate_rule_predictions(
+    daily_change_pct: float,
+    volatility_20d: float,
+    sentiment_score: float = 0.0,
+    event_score: float = 0.0,
+    volume_shock_score: float = 0.0,
+    market_score: float = 0.0,
+    style_score: float = 0.0,
+    market_degraded: bool = False,
+) -> dict[str, dict[str, float]]:
+    # Candidate model: stronger trend + market sensitivity for A/B comparison.
+    short_base = daily_change_pct * 1.85 - volatility_20d * 0.12
+    mid_base = daily_change_pct * 4.15 - volatility_20d * 0.22
+    return {
+        "short": _compute_prediction_payload(
+            horizon="short",
+            base_expected=short_base,
+            volatility_20d=volatility_20d,
+            sentiment_score=sentiment_score,
+            event_score=event_score,
+            volume_shock_score=volume_shock_score,
+            market_score=market_score * 1.05,
+            style_score=style_score * 1.10,
+            market_degraded=market_degraded,
+            expected_scale=1.04,
+        ),
+        "mid": _compute_prediction_payload(
+            horizon="mid",
+            base_expected=mid_base,
+            volatility_20d=volatility_20d,
+            sentiment_score=sentiment_score,
+            event_score=event_score,
+            volume_shock_score=volume_shock_score,
+            market_score=market_score * 1.12,
+            style_score=style_score * 1.08,
+            market_degraded=market_degraded,
+            expected_scale=1.06,
+        ),
     }
 
 
@@ -65,6 +160,8 @@ def explain_features(
     sentiment_score: float = 0.0,
     event_score: float = 0.0,
     volume_shock_score: float = 0.0,
+    market_score: float = 0.0,
+    style_score: float = 0.0,
 ) -> list[ExplainFactor]:
     if daily_change_pct is None or volatility_20d is None:
         # Fallback for incomplete upstream data.
@@ -87,6 +184,8 @@ def explain_features(
             ExplainFactor(name="舆情情绪分", contribution=round(_clamp(sentiment_score * 0.45, -0.6, 0.6), 2)),
             ExplainFactor(name="公告事件冲击", contribution=round(_clamp(event_score * 0.50, -0.6, 0.6), 2)),
             ExplainFactor(name="资讯热度冲击", contribution=round(_clamp(volume_shock_score * 0.25, -0.4, 0.5), 2)),
+            ExplainFactor(name="市场风险偏好", contribution=round(_clamp(market_score * 0.30, -0.6, 0.6), 2)),
+            ExplainFactor(name="成长/价值风格", contribution=round(_clamp(style_score * 0.22, -0.5, 0.5), 2)),
         ]
     else:
         factors = [
@@ -95,11 +194,40 @@ def explain_features(
             ExplainFactor(name="舆情延续分", contribution=round(_clamp(sentiment_score * 0.55, -0.7, 0.7), 2)),
             ExplainFactor(name="公告事件延续", contribution=round(_clamp(event_score * 0.60, -0.7, 0.7), 2)),
             ExplainFactor(name="资讯热度", contribution=round(_clamp(volume_shock_score * 0.18, -0.4, 0.4), 2)),
+            ExplainFactor(name="市场风险偏好", contribution=round(_clamp(market_score * 0.40, -0.8, 0.8), 2)),
+            ExplainFactor(name="成长/价值风格", contribution=round(_clamp(style_score * 0.30, -0.7, 0.7), 2)),
         ]
 
     # Keep the explain card concise by returning top-4 absolute contributors.
     factors.sort(key=lambda x: abs(x.contribution), reverse=True)
     return factors[:4]
+
+
+def build_risk_flags(
+    *,
+    volatility_20d: float | None,
+    confidence: float,
+    sentiment_score: float = 0.0,
+    event_score: float = 0.0,
+    volume_shock_score: float = 0.0,
+    market_source_degraded: bool = False,
+) -> list[str]:
+    flags: list[str] = []
+    if volatility_20d is not None and volatility_20d >= 2.5:
+        flags.append("高波动风险")
+    if confidence < 0.45:
+        flags.append("置信度偏低")
+    if sentiment_score <= -0.25:
+        flags.append("舆情偏负面")
+    if event_score <= -0.25:
+        flags.append("公告事件偏利空")
+    if abs(volume_shock_score) >= 0.8:
+        flags.append("信息热度异常")
+    if market_source_degraded:
+        flags.append("市场行情因子降级")
+    if not flags:
+        flags.append("风险整体可控")
+    return flags[:4]
 
 
 def confidence_interval(expected_return_pct: float, confidence: float) -> tuple[float, float]:

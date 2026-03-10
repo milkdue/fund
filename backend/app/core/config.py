@@ -12,9 +12,13 @@ class Settings(BaseSettings):
     source_nav_limit_per_min: int = 90
     source_search_limit_per_min: int = 30
     source_news_limit_per_min: int = 20
+    source_market_limit_per_min: int = 30
 
     model_short_version: str = "short-v0.1"
     model_mid_version: str = "mid-v0.1"
+    model_candidate_short_version: str = "short-v0.2"
+    model_candidate_mid_version: str = "mid-v0.2"
+    model_ab_enabled: bool = True
 
     model_config = SettingsConfigDict(env_prefix="FUND_", env_file=".env", extra="ignore")
 

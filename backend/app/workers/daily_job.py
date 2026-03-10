@@ -4,6 +4,7 @@ from sqlalchemy import select
 
 from app.db.session import SessionLocal
 from app.models.entities import Fund
+from app.services.market_context_service import MarketContextError, MarketContextRateLimitError, refresh_market_indices
 from app.services.market_sync import MarketSyncError, refresh_fund_data
 from app.services.news_sync import NewsSyncError, NewsSyncRateLimitError, refresh_news_signals_for_code
 
@@ -19,6 +20,12 @@ def run_daily_refresh(codes: list[str] | None = None) -> dict:
         for code in existing_codes:
             if code not in target_codes:
                 target_codes.append(code)
+
+        market_status = "ok"
+        try:
+            refresh_market_indices(db)
+        except (MarketContextError, MarketContextRateLimitError):
+            market_status = "degraded"
 
         success = 0
         failed: list[str] = []
@@ -45,6 +52,7 @@ def run_daily_refresh(codes: list[str] | None = None) -> dict:
         "status": "ok" if not failed else "partial",
         "run_at": datetime.utcnow().isoformat(),
         "coverage_rate": coverage,
+        "market_status": market_status,
         "success_count": success,
         "failed_codes": failed,
         "news_success_count": news_success,

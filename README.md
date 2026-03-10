@@ -17,11 +17,21 @@
 - `GET /v1/funds/{code}/quote`
 - `GET /v1/funds/{code}/predict?horizon=short|mid`
 - `GET /v1/funds/{code}/explain?horizon=short|mid`
+- `GET /v1/funds/{code}/kline`（净值估算趋势图数据，非真实OHLC）
 - `GET /v1/funds/{code}/news-signal`
+- `POST /v1/funds/{code}/feedback`
+- `GET /v1/funds/{code}/feedback/summary?horizon=short|mid`
 - `GET /v1/user/watchlist`
 - `POST /v1/user/watchlist`
+- `GET /v1/user/alerts`
+- `POST /v1/user/alerts`
+- `GET /v1/user/alerts/check`
 - `GET /v1/model/health`
+- `GET /v1/model/backtest/latest?horizon=short|mid`
+- `GET /v1/model/ab/latest?horizon=short|mid`
+- `GET /v1/model/ab/summary?horizon=short|mid`
 - `GET /v1/system/data-sources`
+- `GET /v1/system/market-context`
 - `GET /healthz`
 
 ## 快速启动
@@ -68,9 +78,13 @@ cd android
 - `CRON_SECRET=<long-random-string>`（推荐，Vercel Cron 鉴权）
 - `FUND_MODEL_SHORT_VERSION=short-v0.1`
 - `FUND_MODEL_MID_VERSION=mid-v0.1`
+- `FUND_MODEL_CANDIDATE_SHORT_VERSION=short-v0.2`
+- `FUND_MODEL_CANDIDATE_MID_VERSION=mid-v0.2`
+- `FUND_MODEL_AB_ENABLED=true`
 - `FUND_SOURCE_NAV_LIMIT_PER_MIN=90`
 - `FUND_SOURCE_SEARCH_LIMIT_PER_MIN=30`
 - `FUND_SOURCE_NEWS_LIMIT_PER_MIN=20`
+- `FUND_SOURCE_MARKET_LIMIT_PER_MIN=30`
 
 可选：
 - `FUND_REDIS_URL=<Upstash Redis URL>`（当前版本可不填）
@@ -85,9 +99,22 @@ cd android
 - 触发路径：`/v1/internal/cron/daily-refresh`
 - 该接口要求 `Authorization: Bearer <CRON_SECRET>`，Vercel Cron 会自动携带。
 
+### 每周回测报表（Vercel Cron）
+- 已在 `vercel.json` 配置：`0 3 * * 1`（每周一 UTC 03:00）
+- 触发路径：`/v1/internal/cron/weekly-backtest`
+- 可通过 `/v1/model/backtest/latest?horizon=short|mid` 查询最新报表
+
 ## 当前模型实现
 - 规则基线预测：基于最新日涨跌与20日波动生成 short/mid 概率与预期涨幅
 - 舆情增强：每日抓取基金公告标题，进行关键词情绪与事件打分，参与预测修正
+- 风险提示增强：`explain` 返回风险标签（高波动、置信度偏低、舆情负面等）
+- 数据新鲜度：`quote/predict/explain` 返回 `data_freshness`（fresh/lagging/stale）
+- 周报机制：自动生成固定回测指标（准确率、AUC、F1、年化、回撤、夏普）
+- 市场因子：引入沪深300/中证500/创业板的市场与风格打分
+- 概率校准：对 `up_probability` 进行校准变换，减少过度自信
+- 反馈闭环：支持“本次预测是否有帮助”采集
+- 阈值提醒：支持用户配置概率/置信度/预期涨幅阈值
+- A/B 对比：同一时点记录 baseline/candidate 预测差异与胜率
 - 真实净值来源：东方财富 `pingzhongdata/{fund_code}.js`
 - 基金搜索来源：本地库优先 + 东方财富 `fundcode_search.js` 远程补全并回写缓存
 - 公告来源：东方财富 `FundArchivesDatas.aspx?type=jjgg&code={fund_code}`
@@ -99,6 +126,12 @@ cd android
 2. 用 LightGBM/XGBoost 替换当前 mock 预测
 3. 引入 Celery beat/cron 做每日更新
 4. 添加埋点、告警、回测报告
+
+## P1/P2 预留扩展位
+- 统一新鲜度字段：`quote/predict/explain` 的 `data_freshness`
+- 统一风险输出：`explain.risk_flags`
+- 统一周报查询：`/v1/model/backtest/latest`
+- 趋势图语义标记：`kline.is_synthetic` + `kline.note`
 
 ## 合规边界（已在产品流中体现）
 - 首次风险提示强确认

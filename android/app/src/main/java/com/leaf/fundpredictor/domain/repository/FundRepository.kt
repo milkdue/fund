@@ -16,4 +16,6 @@ interface FundRepository {
     suspend fun getKline(code: String, days: Int = 60): List<KlineCandle>
     suspend fun getWatchlist(): List<WatchlistItem>
     suspend fun addWatchlist(code: String): WatchlistItem
+    suspend fun submitFeedback(code: String, horizon: String, isHelpful: Boolean, score: Int = 3): Boolean
+    suspend fun upsertDefaultAlert(code: String, horizon: String = "short"): Boolean
 }

@@ -31,6 +31,9 @@ import androidx.compose.ui.unit.dp
 import com.leaf.fundpredictor.domain.model.KlineCandle
 import com.leaf.fundpredictor.domain.model.Prediction
 import com.leaf.fundpredictor.presentation.components.ListSkeleton
+import java.time.LocalDateTime
+import java.time.OffsetDateTime
+import java.time.format.DateTimeFormatter
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -51,6 +54,7 @@ fun DetailScreen(code: String, viewModel: DetailViewModel, onBack: () -> Unit) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = onBack) { Text("返回") }
                 Button(onClick = { viewModel.addWatchlist(code) }) { Text("加入自选") }
+                Button(onClick = { viewModel.setDefaultAlert(code) }) { Text("添加提醒") }
             }
 
             Text("基金代码: $code", style = MaterialTheme.typography.titleMedium)
@@ -69,6 +73,11 @@ fun DetailScreen(code: String, viewModel: DetailViewModel, onBack: () -> Unit) {
                             color = numberColor(quote.dailyChangePct)
                         )
                         Text("20日波动率: ${quote.volatility20d}%")
+                        Text("数据时间: ${formatAsOf(quote.asOf)}")
+                        Text(
+                            "新鲜度: ${freshnessText(quote.dataFreshness)}",
+                            color = freshnessColor(quote.dataFreshness),
+                        )
                     }
                 }
 
@@ -89,6 +98,10 @@ fun DetailScreen(code: String, viewModel: DetailViewModel, onBack: () -> Unit) {
                 Card {
                     Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text("预测依据", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            "依据新鲜度: ${freshnessText(it.dataFreshness)}",
+                            color = freshnessColor(it.dataFreshness),
+                        )
                         Text("短期置信区间: ${signedPercent(it.confidenceIntervalPct.first)} ~ ${signedPercent(it.confidenceIntervalPct.second)}")
                         Text("核心因子贡献")
                         it.topFactors.forEach { factor ->
@@ -100,10 +113,25 @@ fun DetailScreen(code: String, viewModel: DetailViewModel, onBack: () -> Unit) {
                                 )
                             }
                         }
+                        if (it.riskFlags.isNotEmpty()) {
+                            Text("风险标签")
+                            it.riskFlags.forEach { flag ->
+                                Text("• $flag", color = riskFlagColor(flag))
+                            }
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(onClick = { viewModel.submitFeedback(code, "short", true) }) {
+                                Text("有帮助")
+                            }
+                            Button(onClick = { viewModel.submitFeedback(code, "short", false) }) {
+                                Text("没帮助")
+                            }
+                        }
                     }
                 }
             }
 
+            state.notice?.let { Text(it, color = Color(0xFF0B8A43)) }
             state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         }
     }
@@ -114,6 +142,11 @@ private fun PredictionCard(title: String, prediction: Prediction) {
     Card {
         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(title, style = MaterialTheme.typography.titleMedium)
+            Text("数据时间: ${formatAsOf(prediction.asOf)}")
+            Text(
+                "新鲜度: ${freshnessText(prediction.dataFreshness)}",
+                color = freshnessColor(prediction.dataFreshness),
+            )
             Text("上涨概率: ${(prediction.upProbability * 100).toInt()}%")
             LinearProgressIndicator(
                 progress = { prediction.upProbability.toFloat() },
@@ -138,8 +171,8 @@ private fun KlineCard(candles: List<KlineCandle>) {
 
     Card {
         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("K线图 (近60日)", style = MaterialTheme.typography.titleMedium)
-            Text("展示净值走势区间，供预测结果参考")
+            Text("净值趋势图（近60日）", style = MaterialTheme.typography.titleMedium)
+            Text("由净值序列估算生成，仅用于趋势参考（非真实OHLC K线）")
             Canvas(modifier = Modifier.fillMaxWidth().height(120.dp)) {
                 val min = candles.minOfOrNull { it.low } ?: 0.0
                 val max = candles.maxOfOrNull { it.high } ?: 1.0
@@ -186,6 +219,37 @@ private fun KlineCard(candles: List<KlineCandle>) {
 
 private fun signedPercent(v: Double): String {
     return if (v > 0) "+${String.format("%.2f", v)}%" else "${String.format("%.2f", v)}%"
+}
+
+private fun formatAsOf(raw: String): String {
+    val outputFmt = DateTimeFormatter.ofPattern("MM-dd HH:mm")
+    return runCatching {
+        OffsetDateTime.parse(raw).format(outputFmt)
+    }.recoverCatching {
+        LocalDateTime.parse(raw).format(outputFmt)
+    }.getOrElse { raw }
+}
+
+private fun freshnessText(value: String): String {
+    return when (value.lowercase()) {
+        "fresh" -> "新鲜"
+        "lagging" -> "一般"
+        "stale" -> "过期"
+        else -> "未知"
+    }
+}
+
+private fun freshnessColor(value: String): Color {
+    return when (value.lowercase()) {
+        "fresh" -> Color(0xFF0B8A43)
+        "lagging" -> Color(0xFFB26A00)
+        "stale" -> Color(0xFFC62828)
+        else -> Color(0xFF666666)
+    }
+}
+
+private fun riskFlagColor(flag: String): Color {
+    return if (flag == "风险整体可控") Color(0xFF0B8A43) else Color(0xFFC62828)
 }
 
 @Composable

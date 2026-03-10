@@ -15,6 +15,8 @@ data class FundDto(val code: String, val name: String, val category: String)
 @JsonClass(generateAdapter = true)
 data class QuoteDto(
     val code: String,
+    @Json(name = "as_of") val asOf: String,
+    @Json(name = "data_freshness") val dataFreshness: String,
     @Json(name = "nav") val nav: Double,
     @Json(name = "daily_change_pct") val dailyChangePct: Double,
     @Json(name = "volatility_20d") val volatility20d: Double,
@@ -24,6 +26,8 @@ data class QuoteDto(
 data class PredictionDto(
     val code: String,
     val horizon: String,
+    @Json(name = "as_of") val asOf: String,
+    @Json(name = "data_freshness") val dataFreshness: String,
     @Json(name = "up_probability") val upProbability: Double,
     @Json(name = "expected_return_pct") val expectedReturnPct: Double,
     val confidence: Double,
@@ -36,8 +40,10 @@ data class ExplainFactorDto(val name: String, val contribution: Double)
 data class ExplainDto(
     val code: String,
     val horizon: String,
+    @Json(name = "data_freshness") val dataFreshness: String,
     @Json(name = "confidence_interval_pct") val confidenceIntervalPct: List<Double>,
     @Json(name = "top_factors") val topFactors: List<ExplainFactorDto>,
+    @Json(name = "risk_flags") val riskFlags: List<String> = emptyList(),
 )
 
 @JsonClass(generateAdapter = true)
@@ -63,6 +69,46 @@ data class WatchlistItemDto(
 
 @JsonClass(generateAdapter = true)
 data class WatchlistAddRequest(@Json(name = "fund_code") val fundCode: String)
+
+@JsonClass(generateAdapter = true)
+data class FeedbackRequest(
+    val horizon: String,
+    @Json(name = "is_helpful") val isHelpful: Boolean,
+    val score: Int = 3,
+    val comment: String? = null,
+)
+
+@JsonClass(generateAdapter = true)
+data class FeedbackDto(
+    val id: Long,
+    @Json(name = "user_id") val userId: String,
+    @Json(name = "fund_code") val fundCode: String,
+    val horizon: String,
+    @Json(name = "is_helpful") val isHelpful: Boolean,
+    val score: Int,
+)
+
+@JsonClass(generateAdapter = true)
+data class AlertRuleRequest(
+    @Json(name = "fund_code") val fundCode: String,
+    val horizon: String = "short",
+    @Json(name = "min_up_probability") val minUpProbability: Double = 0.6,
+    @Json(name = "min_confidence") val minConfidence: Double = 0.55,
+    @Json(name = "min_expected_return_pct") val minExpectedReturnPct: Double = 0.0,
+    val enabled: Boolean = true,
+)
+
+@JsonClass(generateAdapter = true)
+data class AlertRuleDto(
+    val id: Long,
+    @Json(name = "user_id") val userId: String,
+    @Json(name = "fund_code") val fundCode: String,
+    val horizon: String,
+    @Json(name = "min_up_probability") val minUpProbability: Double,
+    @Json(name = "min_confidence") val minConfidence: Double,
+    @Json(name = "min_expected_return_pct") val minExpectedReturnPct: Double,
+    val enabled: Boolean,
+)
 
 interface FundApi {
     @GET("funds/search")
@@ -91,4 +137,17 @@ interface FundApi {
         @Body payload: WatchlistAddRequest,
         @Header("X-User-Id") userId: String = "demo-user",
     ): WatchlistItemDto
+
+    @POST("funds/{code}/feedback")
+    suspend fun postFeedback(
+        @Path("code") code: String,
+        @Body payload: FeedbackRequest,
+        @Header("X-User-Id") userId: String = "demo-user",
+    ): FeedbackDto
+
+    @POST("user/alerts")
+    suspend fun upsertAlert(
+        @Body payload: AlertRuleRequest,
+        @Header("X-User-Id") userId: String = "demo-user",
+    ): AlertRuleDto
 }
