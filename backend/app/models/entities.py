@@ -177,3 +177,30 @@ class PredictionABResult(Base):
     actual_return_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
     winner: Mapped[str] = mapped_column(String(16), nullable=False, default="tie")
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+
+
+class AiJudgementCache(Base):
+    __tablename__ = "ai_judgement_cache"
+    __table_args__ = (
+        UniqueConstraint("fund_code", "horizon", "as_of", "model", "prompt_version", name="uq_ai_judgement_key"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    fund_code: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
+    horizon: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
+    as_of: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
+    data_freshness: Mapped[str] = mapped_column(String(16), nullable=False, default="fresh")
+    provider: Mapped[str] = mapped_column(String(32), nullable=False, default="fallback-rule")
+    model: Mapped[str] = mapped_column(String(64), nullable=False, default="fallback")
+    prompt_version: Mapped[str] = mapped_column(String(16), nullable=False, default="v1")
+    trend: Mapped[str] = mapped_column(String(16), nullable=False, default="sideways")
+    trend_strength: Mapped[int] = mapped_column(Integer, nullable=False, default=50)
+    agreement_with_model: Mapped[str] = mapped_column(String(16), nullable=False, default="agree")
+    key_reasons_json: Mapped[str] = mapped_column(String(2048), nullable=False, default="[]")
+    risk_warnings_json: Mapped[str] = mapped_column(String(2048), nullable=False, default="[]")
+    confidence_adjustment: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    adjusted_up_probability: Mapped[float] = mapped_column(Float, nullable=False, default=0.5)
+    summary: Mapped[str] = mapped_column(String(1024), nullable=False, default="")
+    raw_response: Mapped[str | None] = mapped_column(String(8192), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)

@@ -6,6 +6,7 @@ import com.leaf.fundpredictor.data.remote.AlertRuleRequest
 import com.leaf.fundpredictor.data.remote.FeedbackRequest
 import com.leaf.fundpredictor.data.remote.FundApi
 import com.leaf.fundpredictor.data.remote.WatchlistAddRequest
+import com.leaf.fundpredictor.domain.model.AiJudgement
 import com.leaf.fundpredictor.domain.model.Explain
 import com.leaf.fundpredictor.domain.model.ExplainFactor
 import com.leaf.fundpredictor.domain.model.Fund
@@ -57,6 +58,26 @@ class FundRepositoryImpl @Inject constructor(
             confidenceIntervalPct = Pair(ci.getOrElse(0) { 0.0 }, ci.getOrElse(1) { 0.0 }),
             topFactors = dto.topFactors.map { ExplainFactor(it.name, it.contribution) },
             riskFlags = dto.riskFlags,
+        )
+    }
+
+    override suspend fun getAiJudgement(code: String, horizon: String): AiJudgement {
+        val dto = api.getAiJudgement(code, horizon)
+        return AiJudgement(
+            code = dto.code,
+            horizon = dto.horizon,
+            asOf = dto.asOf,
+            dataFreshness = dto.dataFreshness,
+            trend = dto.trend,
+            trendStrength = dto.trendStrength,
+            agreementWithModel = dto.agreementWithModel,
+            keyReasons = dto.keyReasons,
+            riskWarnings = dto.riskWarnings,
+            confidenceAdjustment = dto.confidenceAdjustment,
+            adjustedUpProbability = dto.adjustedUpProbability,
+            summary = dto.summary,
+            provider = dto.provider,
+            model = dto.model,
         )
     }
 

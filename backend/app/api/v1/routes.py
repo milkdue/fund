@@ -9,6 +9,7 @@ from app.db.session import get_db
 from app.schemas.fund import (
     AbCompareItem,
     AbSummaryResponse,
+    AiJudgementResponse,
     AlertCheckResponse,
     AlertHitItem,
     AlertRuleIn,
@@ -40,6 +41,7 @@ from app.services.model_health import get_model_health
 from app.services.market_sync import MarketSyncError, MarketSyncRateLimitError, refresh_fund_data
 from app.services.model_ab_service import ab_summary, list_latest_ab_results
 from app.services.news_sync import NewsSyncError, NewsSyncRateLimitError, refresh_news_signals_for_code
+from app.services.ai_second_opinion import AiSecondOpinionError, get_ai_second_opinion
 from app.services.predictor import build_risk_flags, confidence_interval, explain_features
 from app.services.fund_search_source import FundSearchError, FundSearchRateLimitError, remote_search_funds
 from app.services.fund_data_source import FundDataError, fetch_kline_points
@@ -233,6 +235,28 @@ def fund_explain(code: str, horizon: str = Query(pattern="^(short|mid)$"), db: S
             market_source_degraded=market_ctx.source_degraded,
         ),
     )
+
+
+@router.get("/funds/{code}/ai-judgement", response_model=AiJudgementResponse)
+def fund_ai_judgement(code: str, horizon: str = Query(pattern="^(short|mid)$"), db: Session = Depends(get_db)):
+    try:
+        return AiJudgementResponse(**get_ai_second_opinion(db, code, horizon))
+    except AiSecondOpinionError as exc:
+        if str(exc) != "prediction not found":
+            raise HTTPException(status_code=502, detail=f"ai second opinion unavailable: {exc}") from exc
+
+    try:
+        _refresh_news_signal_soft(db, code)
+        refresh_fund_data(db, code)
+    except MarketSyncRateLimitError as exc:
+        raise HTTPException(status_code=429, detail=f"quote source throttled: {exc}") from exc
+    except MarketSyncError as exc:
+        raise HTTPException(status_code=502, detail=f"fund data source unavailable: {exc}") from exc
+
+    try:
+        return AiJudgementResponse(**get_ai_second_opinion(db, code, horizon))
+    except AiSecondOpinionError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.get("/funds/{code}/kline", response_model=KlineResponse)

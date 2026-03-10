@@ -28,6 +28,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.leaf.fundpredictor.domain.model.AiJudgement
 import com.leaf.fundpredictor.domain.model.KlineCandle
 import com.leaf.fundpredictor.domain.model.Prediction
 import com.leaf.fundpredictor.presentation.components.ListSkeleton
@@ -39,6 +40,8 @@ import java.time.format.DateTimeFormatter
 @Composable
 fun DetailScreen(code: String, viewModel: DetailViewModel, onBack: () -> Unit) {
     val state by viewModel.uiState.collectAsState()
+    val shortAi = state.shortAi
+    val midAi = state.midAi
 
     LaunchedEffect(code) { viewModel.load(code) }
 
@@ -90,8 +93,20 @@ fun DetailScreen(code: String, viewModel: DetailViewModel, onBack: () -> Unit) {
                 PredictionCard(title = "短期预测 (1-7天)", prediction = pred)
             }
 
+            if (shortAi != null) {
+                AiJudgementCard(title = "AI第二意见 (短期)", judgement = shortAi)
+            } else if (!state.loading) {
+                AiUnavailableCard(title = "AI第二意见 (短期)")
+            }
+
             state.midPred?.let { pred ->
                 PredictionCard(title = "中期信号 (1-3月)", prediction = pred)
+            }
+
+            if (midAi != null) {
+                AiJudgementCard(title = "AI第二意见 (中期)", judgement = midAi)
+            } else if (!state.loading) {
+                AiUnavailableCard(title = "AI第二意见 (中期)")
             }
 
             state.explain?.let {
@@ -159,6 +174,53 @@ private fun PredictionCard(title: String, prediction: Prediction) {
                 modifier = Modifier.fillMaxWidth(),
                 color = MaterialTheme.colorScheme.secondary,
             )
+        }
+    }
+}
+
+@Composable
+private fun AiJudgementCard(title: String, judgement: AiJudgement) {
+    Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFF4F8FF))) {
+        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(title, style = MaterialTheme.typography.titleMedium)
+            Text("数据时间: ${formatAsOf(judgement.asOf)}")
+            Text(
+                "新鲜度: ${freshnessText(judgement.dataFreshness)}",
+                color = freshnessColor(judgement.dataFreshness),
+            )
+            Text(
+                "趋势判断: ${trendText(judgement.trend)} (${judgement.trendStrength}分)",
+                color = trendColor(judgement.trend),
+            )
+            Text("与量化一致性: ${agreementText(judgement.agreementWithModel)}")
+            Text("AI调整后上涨概率: ${(judgement.adjustedUpProbability * 100).toInt()}%")
+            LinearProgressIndicator(
+                progress = { judgement.adjustedUpProbability.toFloat() },
+                modifier = Modifier.fillMaxWidth(),
+                color = Color(0xFF1E5EFF),
+            )
+            Text(
+                "置信修正: ${if (judgement.confidenceAdjustment >= 0) "+" else ""}${String.format("%.2f", judgement.confidenceAdjustment)}",
+                color = numberColor(judgement.confidenceAdjustment),
+            )
+            Text("依据来源: ${judgement.provider}/${judgement.model}")
+            Text("关键依据")
+            judgement.keyReasons.forEach { Text("• $it") }
+            if (judgement.riskWarnings.isNotEmpty()) {
+                Text("风险提示")
+                judgement.riskWarnings.forEach { Text("• $it", color = Color(0xFFC62828)) }
+            }
+            Text(judgement.summary, color = Color(0xFF2D3A4A))
+        }
+    }
+}
+
+@Composable
+private fun AiUnavailableCard(title: String) {
+    Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFF8F8F8))) {
+        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(title, style = MaterialTheme.typography.titleMedium)
+            Text("AI第二意见暂不可用，当前展示量化预测结果。", color = Color(0xFF666666))
         }
     }
 }
@@ -250,6 +312,33 @@ private fun freshnessColor(value: String): Color {
 
 private fun riskFlagColor(flag: String): Color {
     return if (flag == "风险整体可控") Color(0xFF0B8A43) else Color(0xFFC62828)
+}
+
+private fun trendText(value: String): String {
+    return when (value.lowercase()) {
+        "up" -> "看涨"
+        "down" -> "看跌"
+        "sideways" -> "震荡"
+        else -> "未知"
+    }
+}
+
+private fun trendColor(value: String): Color {
+    return when (value.lowercase()) {
+        "up" -> Color(0xFF0B8A43)
+        "down" -> Color(0xFFC62828)
+        "sideways" -> Color(0xFFB26A00)
+        else -> Color(0xFF666666)
+    }
+}
+
+private fun agreementText(value: String): String {
+    return when (value.lowercase()) {
+        "agree" -> "一致"
+        "partial" -> "部分一致"
+        "disagree" -> "不一致"
+        else -> "未知"
+    }
 }
 
 @Composable

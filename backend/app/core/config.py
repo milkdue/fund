@@ -19,6 +19,13 @@ class Settings(BaseSettings):
     model_candidate_short_version: str = "short-v0.2"
     model_candidate_mid_version: str = "mid-v0.2"
     model_ab_enabled: bool = True
+    gemini_enabled: bool = False
+    gemini_api_key: str | None = None
+    gemini_model: str = "gemini-2.0-flash"
+    gemini_temperature: float = 0.2
+    gemini_timeout_ms: int = 12000
+    gemini_max_output_tokens: int = 512
+    gemini_prompt_version: str = "v1"
 
     model_config = SettingsConfigDict(env_prefix="FUND_", env_file=".env", extra="ignore")
 

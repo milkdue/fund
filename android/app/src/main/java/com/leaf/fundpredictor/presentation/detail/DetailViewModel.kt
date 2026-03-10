@@ -3,6 +3,7 @@ package com.leaf.fundpredictor.presentation.detail
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.leaf.fundpredictor.domain.model.AiJudgement
 import com.leaf.fundpredictor.domain.model.Explain
 import com.leaf.fundpredictor.domain.model.KlineCandle
 import com.leaf.fundpredictor.domain.model.Prediction
@@ -21,6 +22,8 @@ data class DetailUiState(
     val quote: Quote? = null,
     val shortPred: Prediction? = null,
     val midPred: Prediction? = null,
+    val shortAi: AiJudgement? = null,
+    val midAi: AiJudgement? = null,
     val explain: Explain? = null,
     val kline: List<KlineCandle> = emptyList(),
     val notice: String? = null,
@@ -43,10 +46,14 @@ class DetailViewModel @Inject constructor(
                 val (quote, shortPred, midPred) = useCase.execute(code)
                 val explain = useCase.explain(code)
                 val kline = repository.getKline(code, days = 60)
+                val shortAi = runCatching { repository.getAiJudgement(code, "short") }.getOrNull()
+                val midAi = runCatching { repository.getAiJudgement(code, "mid") }.getOrNull()
                 DetailUiState(
                     quote = quote,
                     shortPred = shortPred,
                     midPred = midPred,
+                    shortAi = shortAi,
+                    midAi = midAi,
                     explain = explain,
                     kline = kline,
                 )

@@ -39,6 +39,23 @@ data class Explain(
     val riskFlags: List<String>,
 )
 
+data class AiJudgement(
+    val code: String,
+    val horizon: String,
+    val asOf: String,
+    val dataFreshness: String,
+    val trend: String,
+    val trendStrength: Int,
+    val agreementWithModel: String,
+    val keyReasons: List<String>,
+    val riskWarnings: List<String>,
+    val confidenceAdjustment: Double,
+    val adjustedUpProbability: Double,
+    val summary: String,
+    val provider: String,
+    val model: String,
+)
+
 data class KlineCandle(
     val ts: String,
     val open: Double,

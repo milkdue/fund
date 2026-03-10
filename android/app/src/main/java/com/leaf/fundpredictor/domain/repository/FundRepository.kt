@@ -6,6 +6,7 @@ import com.leaf.fundpredictor.domain.model.KlineCandle
 import com.leaf.fundpredictor.domain.model.Prediction
 import com.leaf.fundpredictor.domain.model.Quote
 import com.leaf.fundpredictor.domain.model.WatchlistItem
+import com.leaf.fundpredictor.domain.model.AiJudgement
 
 interface FundRepository {
     suspend fun searchFunds(query: String): List<Fund>
@@ -13,6 +14,7 @@ interface FundRepository {
     suspend fun getQuote(code: String): Quote
     suspend fun getPrediction(code: String, horizon: String): Prediction
     suspend fun getExplain(code: String, horizon: String): Explain
+    suspend fun getAiJudgement(code: String, horizon: String): AiJudgement
     suspend fun getKline(code: String, days: Int = 60): List<KlineCandle>
     suspend fun getWatchlist(): List<WatchlistItem>
     suspend fun addWatchlist(code: String): WatchlistItem

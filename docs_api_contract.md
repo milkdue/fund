@@ -21,6 +21,7 @@ When upstream source rate limit is hit, API returns HTTP `429` with standard err
 - `GET /funds/{code}/quote` -> `{code,as_of,data_freshness,nav,daily_change_pct,volatility_20d}`
 - `GET /funds/{code}/predict?horizon=short|mid` -> `{code,horizon,as_of,data_freshness,up_probability,expected_return_pct,confidence}`
 - `GET /funds/{code}/explain?horizon=short|mid` -> `{code,horizon,data_freshness,confidence_interval_pct,top_factors[],risk_flags[]}`（含行情+公告/舆情因子贡献）
+- `GET /funds/{code}/ai-judgement?horizon=short|mid` -> `{code,horizon,as_of,data_freshness,trend,trend_strength,agreement_with_model,key_reasons[],risk_warnings[],confidence_adjustment,adjusted_up_probability,summary,provider,model}`
 - `GET /funds/{code}/kline` -> `{code,is_synthetic,note,items[]}`（由净值估算，非真实OHLC）
 - `GET /funds/{code}/news-signal` -> `{code,trade_date,headline_count,sentiment_score,event_score,volume_shock,sample_title}`
 - `POST /funds/{code}/feedback` with `{horizon,is_helpful,score,comment}` -> feedback item

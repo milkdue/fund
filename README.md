@@ -17,6 +17,7 @@
 - `GET /v1/funds/{code}/quote`
 - `GET /v1/funds/{code}/predict?horizon=short|mid`
 - `GET /v1/funds/{code}/explain?horizon=short|mid`
+- `GET /v1/funds/{code}/ai-judgement?horizon=short|mid`（Gemini 二级意见，失败自动回退到规则层）
 - `GET /v1/funds/{code}/kline`（净值估算趋势图数据，非真实OHLC）
 - `GET /v1/funds/{code}/news-signal`
 - `POST /v1/funds/{code}/feedback`
@@ -81,6 +82,13 @@ cd android
 - `FUND_MODEL_CANDIDATE_SHORT_VERSION=short-v0.2`
 - `FUND_MODEL_CANDIDATE_MID_VERSION=mid-v0.2`
 - `FUND_MODEL_AB_ENABLED=true`
+- `FUND_GEMINI_ENABLED=false`
+- `FUND_GEMINI_API_KEY=<your-gemini-key>`
+- `FUND_GEMINI_MODEL=gemini-2.0-flash`
+- `FUND_GEMINI_TEMPERATURE=0.2`
+- `FUND_GEMINI_TIMEOUT_MS=12000`
+- `FUND_GEMINI_MAX_OUTPUT_TOKENS=512`
+- `FUND_GEMINI_PROMPT_VERSION=v1`
 - `FUND_SOURCE_NAV_LIMIT_PER_MIN=90`
 - `FUND_SOURCE_SEARCH_LIMIT_PER_MIN=30`
 - `FUND_SOURCE_NEWS_LIMIT_PER_MIN=20`
@@ -106,6 +114,7 @@ cd android
 
 ## 当前模型实现
 - 规则基线预测：基于最新日涨跌与20日波动生成 short/mid 概率与预期涨幅
+- AI 二级意见：`/v1/funds/{code}/ai-judgement`，输入量化+市场+舆情+回测上下文，Gemini 不可用时自动降级规则输出
 - 舆情增强：每日抓取基金公告标题，进行关键词情绪与事件打分，参与预测修正
 - 风险提示增强：`explain` 返回风险标签（高波动、置信度偏低、舆情负面等）
 - 数据新鲜度：`quote/predict/explain` 返回 `data_freshness`（fresh/lagging/stale）

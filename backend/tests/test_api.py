@@ -29,6 +29,10 @@ def test_end_to_end_read_flow():
     assert explain.status_code == 200
     assert explain.json()["top_factors"]
 
+    ai = client.get(f"/v1/funds/{code}/ai-judgement", params={"horizon": "short"})
+    assert ai.status_code == 200
+    assert ai.json()["provider"]
+
 
 def test_watchlist_flow():
     headers = {"X-User-Id": "android-user"}

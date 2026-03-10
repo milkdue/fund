@@ -201,6 +201,23 @@ class MarketContextResponse(BaseModel):
     source_degraded: bool
 
 
+class AiJudgementResponse(BaseModel):
+    code: str
+    horizon: str
+    as_of: datetime
+    data_freshness: str
+    trend: str
+    trend_strength: int = Field(ge=0, le=100)
+    agreement_with_model: str
+    key_reasons: list[str]
+    risk_warnings: list[str]
+    confidence_adjustment: float
+    adjusted_up_probability: float = Field(ge=0.0, le=1.0)
+    summary: str
+    provider: str
+    model: str
+
+
 class DataSourceItem(BaseModel):
     name: str
     purpose: str

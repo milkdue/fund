@@ -47,6 +47,24 @@ data class ExplainDto(
 )
 
 @JsonClass(generateAdapter = true)
+data class AiJudgementDto(
+    val code: String,
+    val horizon: String,
+    @Json(name = "as_of") val asOf: String,
+    @Json(name = "data_freshness") val dataFreshness: String,
+    val trend: String,
+    @Json(name = "trend_strength") val trendStrength: Int,
+    @Json(name = "agreement_with_model") val agreementWithModel: String,
+    @Json(name = "key_reasons") val keyReasons: List<String>,
+    @Json(name = "risk_warnings") val riskWarnings: List<String>,
+    @Json(name = "confidence_adjustment") val confidenceAdjustment: Double,
+    @Json(name = "adjusted_up_probability") val adjustedUpProbability: Double,
+    val summary: String,
+    val provider: String,
+    val model: String,
+)
+
+@JsonClass(generateAdapter = true)
 data class KlineItemDto(
     val ts: String,
     val open: Double,
@@ -125,6 +143,9 @@ interface FundApi {
 
     @GET("funds/{code}/explain")
     suspend fun getExplain(@Path("code") code: String, @Query("horizon") horizon: String): ExplainDto
+
+    @GET("funds/{code}/ai-judgement")
+    suspend fun getAiJudgement(@Path("code") code: String, @Query("horizon") horizon: String): AiJudgementDto
 
     @GET("funds/{code}/kline")
     suspend fun getKline(@Path("code") code: String, @Query("days") days: Int = 60): KlineDto
