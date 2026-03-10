@@ -230,7 +230,9 @@ private fun SourceStatusCard(health: DataHealth) {
     val sourceLine = if (health.sourceStatus.isEmpty()) {
         "数据源状态：暂无"
     } else {
-        val joined = health.sourceStatus.entries.joinToString(" · ") { (k, v) -> "$k:$v" }
+        val joined = health.sourceStatus.entries
+            .sortedWith(compareBy<Map.Entry<String, String>> { sourceOrder(it.key) }.thenBy { it.key })
+            .joinToString(" · ") { (k, v) -> "${sourceName(k)} ${sourceState(v)}" }
         "数据源状态：$joined"
     }
     Card(
@@ -322,6 +324,33 @@ private fun freshnessText(value: String): String {
     return when (value.lowercase()) {
         "fresh" -> "新鲜"
         "lagging" -> "一般"
+        "stale" -> "过期"
+        else -> "未知"
+    }
+}
+
+private fun sourceOrder(key: String): Int {
+    return when (key.lowercase()) {
+        "eastmoney_nav" -> 1
+        "eastmoney_news" -> 2
+        "eastmoney_market" -> 3
+        else -> 99
+    }
+}
+
+private fun sourceName(key: String): String {
+    return when (key.lowercase()) {
+        "eastmoney_nav" -> "净值源"
+        "eastmoney_news" -> "公告舆情源"
+        "eastmoney_market" -> "市场指数源"
+        else -> key
+    }
+}
+
+private fun sourceState(value: String): String {
+    return when (value.lowercase()) {
+        "ok" -> "正常"
+        "degraded" -> "降级"
         "stale" -> "过期"
         else -> "未知"
     }
