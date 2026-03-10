@@ -38,6 +38,29 @@ class ExplainResponse(BaseModel):
     top_factors: list[ExplainFactor]
 
 
+class KlineItem(BaseModel):
+    ts: datetime
+    open: float
+    high: float
+    low: float
+    close: float
+
+
+class KlineResponse(BaseModel):
+    code: str
+    items: list[KlineItem]
+
+
+class NewsSignalResponse(BaseModel):
+    code: str
+    trade_date: str
+    headline_count: int
+    sentiment_score: float
+    event_score: float
+    volume_shock: float
+    sample_title: str
+
+
 class WatchlistIn(BaseModel):
     fund_code: str
 

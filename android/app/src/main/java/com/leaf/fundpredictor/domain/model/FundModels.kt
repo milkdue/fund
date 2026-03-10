@@ -33,6 +33,14 @@ data class Explain(
     val topFactors: List<ExplainFactor>,
 )
 
+data class KlineCandle(
+    val ts: String,
+    val open: Double,
+    val high: Double,
+    val low: Double,
+    val close: Double,
+)
+
 data class WatchlistItem(
     val userId: String,
     val fundCode: String,

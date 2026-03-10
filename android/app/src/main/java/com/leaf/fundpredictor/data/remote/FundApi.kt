@@ -1,6 +1,7 @@
 package com.leaf.fundpredictor.data.remote
 
 import com.squareup.moshi.Json
+import com.squareup.moshi.JsonClass
 import retrofit2.http.Body
 import retrofit2.http.GET
 import retrofit2.http.Header
@@ -8,8 +9,10 @@ import retrofit2.http.POST
 import retrofit2.http.Path
 import retrofit2.http.Query
 
+@JsonClass(generateAdapter = true)
 data class FundDto(val code: String, val name: String, val category: String)
 
+@JsonClass(generateAdapter = true)
 data class QuoteDto(
     val code: String,
     @Json(name = "nav") val nav: Double,
@@ -17,6 +20,7 @@ data class QuoteDto(
     @Json(name = "volatility_20d") val volatility20d: Double,
 )
 
+@JsonClass(generateAdapter = true)
 data class PredictionDto(
     val code: String,
     val horizon: String,
@@ -25,8 +29,10 @@ data class PredictionDto(
     val confidence: Double,
 )
 
+@JsonClass(generateAdapter = true)
 data class ExplainFactorDto(val name: String, val contribution: Double)
 
+@JsonClass(generateAdapter = true)
 data class ExplainDto(
     val code: String,
     val horizon: String,
@@ -34,11 +40,28 @@ data class ExplainDto(
     @Json(name = "top_factors") val topFactors: List<ExplainFactorDto>,
 )
 
+@JsonClass(generateAdapter = true)
+data class KlineItemDto(
+    val ts: String,
+    val open: Double,
+    val high: Double,
+    val low: Double,
+    val close: Double,
+)
+
+@JsonClass(generateAdapter = true)
+data class KlineDto(
+    val code: String,
+    val items: List<KlineItemDto>,
+)
+
+@JsonClass(generateAdapter = true)
 data class WatchlistItemDto(
     @Json(name = "user_id") val userId: String,
     @Json(name = "fund_code") val fundCode: String,
 )
 
+@JsonClass(generateAdapter = true)
 data class WatchlistAddRequest(@Json(name = "fund_code") val fundCode: String)
 
 interface FundApi {
@@ -56,6 +79,9 @@ interface FundApi {
 
     @GET("funds/{code}/explain")
     suspend fun getExplain(@Path("code") code: String, @Query("horizon") horizon: String): ExplainDto
+
+    @GET("funds/{code}/kline")
+    suspend fun getKline(@Path("code") code: String, @Query("days") days: Int = 60): KlineDto
 
     @GET("user/watchlist")
     suspend fun getWatchlist(@Header("X-User-Id") userId: String = "demo-user"): List<WatchlistItemDto>

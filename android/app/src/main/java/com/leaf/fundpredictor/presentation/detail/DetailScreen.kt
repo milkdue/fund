@@ -25,10 +25,10 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
+import com.leaf.fundpredictor.domain.model.KlineCandle
 import com.leaf.fundpredictor.domain.model.Prediction
 import com.leaf.fundpredictor.presentation.components.ListSkeleton
 
@@ -72,12 +72,8 @@ fun DetailScreen(code: String, viewModel: DetailViewModel, onBack: () -> Unit) {
                     }
                 }
 
-                if (state.shortPred != null && state.midPred != null) {
-                    TrendPreviewCard(
-                        nav = quote.nav,
-                        shortExpected = state.shortPred!!.expectedReturnPct,
-                        midExpected = state.midPred!!.expectedReturnPct,
-                    )
+                if (state.kline.isNotEmpty()) {
+                    KlineCard(candles = state.kline)
                 }
             }
 
@@ -92,8 +88,9 @@ fun DetailScreen(code: String, viewModel: DetailViewModel, onBack: () -> Unit) {
             state.explain?.let {
                 Card {
                     Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text("解释因子", style = MaterialTheme.typography.titleMedium)
-                        Text("区间: ${signedPercent(it.confidenceIntervalPct.first)} ~ ${signedPercent(it.confidenceIntervalPct.second)}")
+                        Text("预测依据", style = MaterialTheme.typography.titleMedium)
+                        Text("短期置信区间: ${signedPercent(it.confidenceIntervalPct.first)} ~ ${signedPercent(it.confidenceIntervalPct.second)}")
+                        Text("核心因子贡献")
                         it.topFactors.forEach { factor ->
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                 Text(factor.name)
@@ -134,57 +131,57 @@ private fun PredictionCard(title: String, prediction: Prediction) {
 }
 
 @Composable
-private fun TrendPreviewCard(nav: Double, shortExpected: Double, midExpected: Double) {
-    val points = buildTrendPreview(nav, shortExpected, midExpected)
-    val trendColor = if (points.last() >= points.first()) Color(0xFF0B8A43) else Color(0xFFC62828)
+private fun KlineCard(candles: List<KlineCandle>) {
     val axisColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
+    val bullish = Color(0xFF0B8A43)
+    val bearish = Color(0xFFC62828)
 
     Card {
         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("趋势预览 (模拟)", style = MaterialTheme.typography.titleMedium)
-            Text("基于当前净值与短/中期预测，生成未来路径参考")
+            Text("K线图 (近60日)", style = MaterialTheme.typography.titleMedium)
+            Text("展示净值走势区间，供预测结果参考")
             Canvas(modifier = Modifier.fillMaxWidth().height(120.dp)) {
-                val min = points.minOrNull() ?: 0.0
-                val max = points.maxOrNull() ?: 1.0
+                val min = candles.minOfOrNull { it.low } ?: 0.0
+                val max = candles.maxOfOrNull { it.high } ?: 1.0
                 val range = (max - min).takeIf { it > 0 } ?: 1.0
-                val stepX = size.width / (points.size - 1)
-                val offsets = points.mapIndexed { idx, v ->
+                val bodyWidth = (size.width / candles.size * 0.55f).coerceAtLeast(2f)
+                val stepX = if (candles.size > 1) size.width / (candles.size - 1) else size.width
+
+                candles.forEachIndexed { idx, c ->
                     val x = idx * stepX
-                    val y = ((max - v) / range * size.height).toFloat()
-                    Offset(x = x, y = y)
-                }
-                for (i in 1 until offsets.size) {
+                    val highY = ((max - c.high) / range * size.height).toFloat()
+                    val lowY = ((max - c.low) / range * size.height).toFloat()
+                    val openY = ((max - c.open) / range * size.height).toFloat()
+                    val closeY = ((max - c.close) / range * size.height).toFloat()
+                    val up = c.close >= c.open
+                    val color = if (up) bullish else bearish
+
                     drawLine(
-                        color = trendColor,
-                        start = offsets[i - 1],
-                        end = offsets[i],
-                        strokeWidth = 6f,
-                        cap = StrokeCap.Round,
+                        color = color,
+                        start = Offset(x, highY),
+                        end = Offset(x, lowY),
+                        strokeWidth = 2f,
+                    )
+
+                    val top = minOf(openY, closeY)
+                    val bottom = maxOf(openY, closeY)
+                    val bodyHeight = (bottom - top).coerceAtLeast(2f)
+                    drawRect(
+                        color = color,
+                        topLeft = Offset(x - bodyWidth / 2f, top),
+                        size = Size(bodyWidth, bodyHeight),
                     )
                 }
+
                 drawLine(
                     color = axisColor,
                     start = Offset(0f, size.height - 2f),
                     end = Offset(size.width, size.height - 2f),
                     strokeWidth = 2f,
-                    cap = StrokeCap.Round,
                 )
-                drawCircle(color = trendColor, radius = 6f, center = offsets.last(), style = Stroke(width = 4f))
             }
         }
     }
-}
-
-private fun buildTrendPreview(nav: Double, shortExpected: Double, midExpected: Double): List<Double> {
-    val p0 = nav
-    val p1 = p0 * (1.0 + shortExpected / 100.0 * 0.25)
-    val p2 = p0 * (1.0 + shortExpected / 100.0 * 0.55)
-    val p3 = p0 * (1.0 + shortExpected / 100.0 * 0.85)
-    val p4 = p0 * (1.0 + midExpected / 100.0 * 0.30)
-    val p5 = p0 * (1.0 + midExpected / 100.0 * 0.60)
-    val p6 = p0 * (1.0 + midExpected / 100.0 * 0.85)
-    val p7 = p0 * (1.0 + midExpected / 100.0)
-    return listOf(p0, p1, p2, p3, p4, p5, p6, p7)
 }
 
 private fun signedPercent(v: Double): String {

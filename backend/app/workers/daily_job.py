@@ -5,6 +5,7 @@ from sqlalchemy import select
 from app.db.session import SessionLocal
 from app.models.entities import Fund
 from app.services.market_sync import MarketSyncError, refresh_fund_data
+from app.services.news_sync import NewsSyncError, NewsSyncRateLimitError, refresh_news_signals_for_code
 
 DEFAULT_CODES = ["110022", "161725", "005827"]
 
@@ -21,7 +22,15 @@ def run_daily_refresh(codes: list[str] | None = None) -> dict:
 
         success = 0
         failed: list[str] = []
+        news_success = 0
+        news_failed: list[str] = []
         for code in target_codes:
+            try:
+                refresh_news_signals_for_code(db, code)
+                news_success += 1
+            except (NewsSyncError, NewsSyncRateLimitError):
+                news_failed.append(code)
+
             try:
                 refresh_fund_data(db, code)
                 success += 1
@@ -38,6 +47,8 @@ def run_daily_refresh(codes: list[str] | None = None) -> dict:
         "coverage_rate": coverage,
         "success_count": success,
         "failed_codes": failed,
+        "news_success_count": news_success,
+        "news_failed_codes": news_failed,
     }
 
 

@@ -1,6 +1,6 @@
-from datetime import datetime
+from datetime import date, datetime
 
-from sqlalchemy import DateTime, Float, Integer, String, UniqueConstraint
+from sqlalchemy import Date, DateTime, Float, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.session import Base
@@ -47,3 +47,34 @@ class Watchlist(Base):
     user_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     fund_code: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+
+
+class NewsRaw(Base):
+    __tablename__ = "news_raw"
+    __table_args__ = (UniqueConstraint("fund_code", "title_hash", "published_at", name="uq_news_raw_fund_hash_pub"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    fund_code: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
+    source: Mapped[str] = mapped_column(String(64), nullable=False)
+    title: Mapped[str] = mapped_column(String(512), nullable=False)
+    title_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    published_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
+    sentiment_score: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    event_score: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+
+
+class NewsSignalDaily(Base):
+    __tablename__ = "news_signal_daily"
+    __table_args__ = (UniqueConstraint("fund_code", "trade_date", name="uq_news_signal_fund_date"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    fund_code: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
+    trade_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    headline_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    sentiment_score: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    event_score: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    volume_shock: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    sample_title: Mapped[str] = mapped_column(String(256), nullable=False, default="暂无新增公告/舆情")
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)

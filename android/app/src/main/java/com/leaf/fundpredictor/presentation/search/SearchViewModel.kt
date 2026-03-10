@@ -1,5 +1,6 @@
 package com.leaf.fundpredictor.presentation.search
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.leaf.fundpredictor.domain.model.Fund
@@ -38,7 +39,10 @@ class SearchViewModel @Inject constructor(
                 if (query.isBlank()) repository.hotFunds() else repository.searchFunds(query)
             }
                 .onSuccess { _uiState.value = _uiState.value.copy(loading = false, items = it) }
-                .onFailure { _uiState.value = _uiState.value.copy(loading = false, error = "搜索失败，请稍后再试") }
+                .onFailure { ex ->
+                    Log.e("SearchViewModel", "search failed, query=$query, type=${ex::class.java.simpleName}, msg=${ex.message}", ex)
+                    _uiState.value = _uiState.value.copy(loading = false, error = "搜索失败，请稍后再试")
+                }
         }
     }
 }

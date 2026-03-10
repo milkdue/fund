@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     cron_secret: str | None = None
     source_nav_limit_per_min: int = 90
     source_search_limit_per_min: int = 30
+    source_news_limit_per_min: int = 20
 
     model_short_version: str = "short-v0.1"
     model_mid_version: str = "mid-v0.1"

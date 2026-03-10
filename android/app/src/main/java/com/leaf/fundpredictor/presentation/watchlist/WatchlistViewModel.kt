@@ -1,5 +1,6 @@
 package com.leaf.fundpredictor.presentation.watchlist
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.leaf.fundpredictor.domain.model.WatchlistItem
@@ -26,7 +27,11 @@ class WatchlistViewModel @Inject constructor(
     fun load() {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(loading = true)
-            val rows = runCatching { repository.getWatchlist() }.getOrDefault(emptyList())
+            val rows = runCatching { repository.getWatchlist() }
+                .onFailure { ex ->
+                    Log.e("WatchlistViewModel", "load failed, type=${ex::class.java.simpleName}, msg=${ex.message}", ex)
+                }
+                .getOrDefault(emptyList())
             _uiState.value = _uiState.value.copy(loading = false, items = rows)
         }
     }

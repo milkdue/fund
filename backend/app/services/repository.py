@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models.entities import Fund, Prediction, Quote, Watchlist
+from app.models.entities import Fund, NewsSignalDaily, Prediction, Quote, Watchlist
 
 
 def seed_data(db: Session) -> None:
@@ -58,6 +58,16 @@ def latest_prediction(db: Session, code: str, horizon: str) -> Prediction | None
         select(Prediction)
         .where(Prediction.fund_code == code, Prediction.horizon == horizon)
         .order_by(Prediction.as_of.desc())
+        .limit(1)
+    )
+    return db.scalars(stmt).first()
+
+
+def latest_news_signal(db: Session, code: str) -> NewsSignalDaily | None:
+    stmt = (
+        select(NewsSignalDaily)
+        .where(NewsSignalDaily.fund_code == code)
+        .order_by(NewsSignalDaily.trade_date.desc())
         .limit(1)
     )
     return db.scalars(stmt).first()

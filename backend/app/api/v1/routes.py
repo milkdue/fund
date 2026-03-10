@@ -1,4 +1,5 @@
 import os
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from sqlalchemy.orm import Session
@@ -9,8 +10,11 @@ from app.schemas.fund import (
     DataSourceItem,
     DataSourceResponse,
     ExplainResponse,
+    KlineItem,
+    KlineResponse,
     FundItem,
     ModelHealthResponse,
+    NewsSignalResponse,
     PredictResponse,
     QuoteResponse,
     WatchlistIn,
@@ -18,11 +22,20 @@ from app.schemas.fund import (
 )
 from app.services.model_health import get_model_health
 from app.services.market_sync import MarketSyncError, MarketSyncRateLimitError, refresh_fund_data
+from app.services.news_sync import NewsSyncError, NewsSyncRateLimitError, refresh_news_signals_for_code
 from app.services.predictor import confidence_interval, explain_features
 from app.services.fund_search_source import FundSearchError, FundSearchRateLimitError, remote_search_funds
+from app.services.fund_data_source import FundDataError, fetch_kline_points
 from app.services.fund_sync import upsert_funds
 from app.services.hot_funds import hot_rank
-from app.services.repository import add_watchlist, get_watchlist, latest_prediction, latest_quote, search_funds
+from app.services.repository import (
+    add_watchlist,
+    get_watchlist,
+    latest_news_signal,
+    latest_prediction,
+    latest_quote,
+    search_funds,
+)
 from app.workers.daily_job import run_daily_refresh
 
 router = APIRouter(prefix="/v1")
@@ -34,6 +47,14 @@ def _verify_cron_auth(authorization: str | None) -> None:
         raise HTTPException(status_code=503, detail="cron secret is not configured")
     if authorization != f"Bearer {expected}":
         raise HTTPException(status_code=401, detail="invalid cron authorization")
+
+
+def _refresh_news_signal_soft(db: Session, code: str) -> None:
+    try:
+        refresh_news_signals_for_code(db, code)
+    except (NewsSyncError, NewsSyncRateLimitError):
+        # Keep main quote/predict flow resilient if news source is unavailable.
+        return
 
 
 @router.get("/funds/search", response_model=list[FundItem])
@@ -53,6 +74,7 @@ def funds_search(q: str = Query(default=""), db: Session = Depends(get_db)):
 
     if not funds and q.isdigit() and len(q) == 6:
         try:
+            _refresh_news_signal_soft(db, q)
             refresh_fund_data(db, q)
             funds = search_funds(db, q)
         except MarketSyncRateLimitError as exc:
@@ -76,6 +98,7 @@ def fund_quote(code: str, db: Session = Depends(get_db)):
     quote = latest_quote(db, code)
     if not quote:
         try:
+            _refresh_news_signal_soft(db, code)
             quote = refresh_fund_data(db, code)
         except MarketSyncRateLimitError as exc:
             raise HTTPException(status_code=429, detail=f"quote source throttled: {exc}") from exc
@@ -95,6 +118,7 @@ def fund_predict(code: str, horizon: str = Query(pattern="^(short|mid)$"), db: S
     pred = latest_prediction(db, code, horizon)
     if not pred:
         try:
+            _refresh_news_signal_soft(db, code)
             refresh_fund_data(db, code)
             pred = latest_prediction(db, code, horizon)
         except MarketSyncRateLimitError as exc:
@@ -118,6 +142,7 @@ def fund_explain(code: str, horizon: str = Query(pattern="^(short|mid)$"), db: S
     pred = latest_prediction(db, code, horizon)
     if not pred:
         try:
+            _refresh_news_signal_soft(db, code)
             refresh_fund_data(db, code)
             pred = latest_prediction(db, code, horizon)
         except MarketSyncRateLimitError as exc:
@@ -126,11 +151,62 @@ def fund_explain(code: str, horizon: str = Query(pattern="^(short|mid)$"), db: S
             raise HTTPException(status_code=502, detail=f"fund data source unavailable: {exc}") from exc
     if not pred:
         raise HTTPException(status_code=404, detail="prediction not found")
+    quote = latest_quote(db, code)
+    news_signal = latest_news_signal(db, code)
     return ExplainResponse(
         code=code,
         horizon=horizon,
         confidence_interval_pct=confidence_interval(pred.expected_return_pct, pred.confidence),
-        top_factors=explain_features(horizon),
+        top_factors=explain_features(
+            horizon=horizon,
+            daily_change_pct=quote.daily_change_pct if quote else None,
+            volatility_20d=quote.volatility_20d if quote else None,
+            sentiment_score=news_signal.sentiment_score if news_signal else 0.0,
+            event_score=news_signal.event_score if news_signal else 0.0,
+            volume_shock_score=news_signal.volume_shock if news_signal else 0.0,
+        ),
+    )
+
+
+@router.get("/funds/{code}/kline", response_model=KlineResponse)
+def fund_kline(code: str, days: int = Query(default=60, ge=10, le=240)):
+    try:
+        items = fetch_kline_points(code, days=days)
+    except FundDataError as exc:
+        raise HTTPException(status_code=502, detail=f"fund data source unavailable: {exc}") from exc
+    return KlineResponse(
+        code=code,
+        items=[
+            KlineItem(ts=i.ts, open=i.open, high=i.high, low=i.low, close=i.close)
+            for i in items
+        ],
+    )
+
+
+@router.get("/funds/{code}/news-signal", response_model=NewsSignalResponse)
+def fund_news_signal(code: str, db: Session = Depends(get_db)):
+    row = latest_news_signal(db, code)
+    if not row:
+        _refresh_news_signal_soft(db, code)
+        row = latest_news_signal(db, code)
+    if not row:
+        return NewsSignalResponse(
+            code=code,
+            trade_date=datetime.now(tz=UTC).date().isoformat(),
+            headline_count=0,
+            sentiment_score=0.0,
+            event_score=0.0,
+            volume_shock=0.0,
+            sample_title="暂无新增公告/舆情",
+        )
+    return NewsSignalResponse(
+        code=code,
+        trade_date=row.trade_date.isoformat(),
+        headline_count=row.headline_count,
+        sentiment_score=row.sentiment_score,
+        event_score=row.event_score,
+        volume_shock=row.volume_shock,
+        sample_title=row.sample_title,
     )
 
 
@@ -171,6 +247,11 @@ def data_sources():
                 name="Eastmoney fundcode_search",
                 purpose="Fund Search Autocomplete",
                 url="https://fund.eastmoney.com/js/fundcode_search.js",
+            ),
+            DataSourceItem(
+                name="Eastmoney Fund Archives",
+                purpose="Fund Announcement Headlines",
+                url="https://fundf10.eastmoney.com/FundArchivesDatas.aspx?type=jjgg&code={fund_code}",
             ),
         ]
     )

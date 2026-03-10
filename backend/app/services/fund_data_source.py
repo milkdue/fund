@@ -22,6 +22,15 @@ class FundMarketSnapshot:
     volatility_20d: float
 
 
+@dataclass
+class KlinePoint:
+    ts: datetime
+    open: float
+    high: float
+    low: float
+    close: float
+
+
 class FundDataError(Exception):
     pass
 
@@ -52,7 +61,6 @@ def _load_string_value(script: str, var_name: str) -> str:
         raw = _extract_var(script, var_name)
         return raw.strip().strip('"').strip("'")
     except FundDataError:
-        # Fallback for JSON-like payloads: "fS_name":"xxx"
         match = re.search(rf'"{re.escape(var_name)}"\s*:\s*"([^"]+)"', script)
         if match:
             return match.group(1).strip()
@@ -84,7 +92,7 @@ def _calc_volatility_20d(net_values: list[float]) -> float:
     return round(pstdev(returns), 2)
 
 
-def fetch_latest_snapshot(code: str, timeout_seconds: float = 8.0) -> FundMarketSnapshot:
+def _fetch_source_script(code: str, timeout_seconds: float = 8.0) -> str:
     version = int(datetime.now(tz=UTC).timestamp() * 1000)
     url = PINGZHONGDATA_URL.format(code=code, version=version)
     try:
@@ -110,6 +118,11 @@ def fetch_latest_snapshot(code: str, timeout_seconds: float = 8.0) -> FundMarket
     script = response.text.lstrip("\ufeff").strip()
     if script.startswith("<"):
         raise FundDataError(f"unexpected html payload from source: {script[:80]}")
+    return script
+
+
+def fetch_latest_snapshot(code: str, timeout_seconds: float = 8.0) -> FundMarketSnapshot:
+    script = _fetch_source_script(code, timeout_seconds)
     fund_name = _load_string_value(script, "fS_name")
     trend = _load_json_value(script, "Data_netWorthTrend")
 
@@ -133,3 +146,37 @@ def fetch_latest_snapshot(code: str, timeout_seconds: float = 8.0) -> FundMarket
         daily_change_pct=_calc_daily_change(net_values),
         volatility_20d=_calc_volatility_20d(net_values),
     )
+
+
+def fetch_kline_points(code: str, days: int = 60, timeout_seconds: float = 8.0) -> list[KlinePoint]:
+    script = _fetch_source_script(code, timeout_seconds)
+    trend = _load_json_value(script, "Data_netWorthTrend")
+    if not trend:
+        raise FundDataError("empty Data_netWorthTrend")
+
+    sorted_points = sorted(trend, key=lambda item: item.get("x", 0))
+    values = [(int(p.get("x", 0)), float(p.get("y"))) for p in sorted_points if p.get("y") is not None]
+    if len(values) < 2:
+        raise FundDataError("insufficient net worth data")
+
+    values = values[-max(10, min(days, 240)) :]
+    candles: list[KlinePoint] = []
+    prev_close = values[0][1]
+    for ts_millis, close in values:
+        open_price = prev_close
+        diff_pct = abs((close - open_price) / open_price) if open_price else 0.0
+        wick_pct = max(0.0015, min(0.03, diff_pct * 0.6 + 0.002))
+        high = max(open_price, close) * (1.0 + wick_pct)
+        low = min(open_price, close) * (1.0 - wick_pct)
+        candles.append(
+            KlinePoint(
+                ts=datetime.fromtimestamp(ts_millis / 1000, tz=UTC).replace(tzinfo=None),
+                open=round(open_price, 4),
+                high=round(high, 4),
+                low=round(low, 4),
+                close=round(close, 4),
+            )
+        )
+        prev_close = close
+
+    return candles

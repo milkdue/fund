@@ -7,6 +7,7 @@ import com.leaf.fundpredictor.data.remote.WatchlistAddRequest
 import com.leaf.fundpredictor.domain.model.Explain
 import com.leaf.fundpredictor.domain.model.ExplainFactor
 import com.leaf.fundpredictor.domain.model.Fund
+import com.leaf.fundpredictor.domain.model.KlineCandle
 import com.leaf.fundpredictor.domain.model.Prediction
 import com.leaf.fundpredictor.domain.model.Quote
 import com.leaf.fundpredictor.domain.model.WatchlistItem
@@ -45,6 +46,19 @@ class FundRepositoryImpl @Inject constructor(
             confidenceIntervalPct = Pair(ci.getOrElse(0) { 0.0 }, ci.getOrElse(1) { 0.0 }),
             topFactors = dto.topFactors.map { ExplainFactor(it.name, it.contribution) },
         )
+    }
+
+    override suspend fun getKline(code: String, days: Int): List<KlineCandle> {
+        val dto = api.getKline(code, days)
+        return dto.items.map {
+            KlineCandle(
+                ts = it.ts,
+                open = it.open,
+                high = it.high,
+                low = it.low,
+                close = it.close,
+            )
+        }
     }
 
     override suspend fun getWatchlist(): List<WatchlistItem> {

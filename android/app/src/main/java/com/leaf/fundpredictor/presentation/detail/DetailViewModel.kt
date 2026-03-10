@@ -1,12 +1,14 @@
 package com.leaf.fundpredictor.presentation.detail
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.leaf.fundpredictor.domain.model.Explain
+import com.leaf.fundpredictor.domain.model.KlineCandle
 import com.leaf.fundpredictor.domain.model.Prediction
 import com.leaf.fundpredictor.domain.model.Quote
-import com.leaf.fundpredictor.domain.usecase.GetPredictionsUseCase
 import com.leaf.fundpredictor.domain.repository.FundRepository
+import com.leaf.fundpredictor.domain.usecase.GetPredictionsUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -20,6 +22,7 @@ data class DetailUiState(
     val shortPred: Prediction? = null,
     val midPred: Prediction? = null,
     val explain: Explain? = null,
+    val kline: List<KlineCandle> = emptyList(),
     val error: String? = null,
 )
 
@@ -38,10 +41,18 @@ class DetailViewModel @Inject constructor(
             runCatching {
                 val (quote, shortPred, midPred) = useCase.execute(code)
                 val explain = useCase.explain(code)
-                DetailUiState(quote = quote, shortPred = shortPred, midPred = midPred, explain = explain)
+                val kline = repository.getKline(code, days = 60)
+                DetailUiState(
+                    quote = quote,
+                    shortPred = shortPred,
+                    midPred = midPred,
+                    explain = explain,
+                    kline = kline,
+                )
             }.onSuccess {
                 _uiState.value = it
-            }.onFailure {
+            }.onFailure { ex ->
+                Log.e("DetailViewModel", "load failed, code=$code, type=${ex::class.java.simpleName}, msg=${ex.message}", ex)
                 _uiState.value = DetailUiState(error = "详情加载失败")
             }
         }
@@ -50,7 +61,10 @@ class DetailViewModel @Inject constructor(
     fun addWatchlist(code: String) {
         viewModelScope.launch {
             runCatching { repository.addWatchlist(code) }
-                .onFailure { _uiState.value = _uiState.value.copy(error = "加入自选失败") }
+                .onFailure { ex ->
+                    Log.e("DetailViewModel", "add watchlist failed, code=$code, type=${ex::class.java.simpleName}, msg=${ex.message}", ex)
+                    _uiState.value = _uiState.value.copy(error = "加入自选失败")
+                }
         }
     }
 }

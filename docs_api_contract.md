@@ -20,7 +20,8 @@ When upstream source rate limit is hit, API returns HTTP `429` with standard err
 - `GET /funds/hot` -> `[{code,name,category}]` (hot ranking, cache-backed)
 - `GET /funds/{code}/quote` -> `{code,as_of,nav,daily_change_pct,volatility_20d}`
 - `GET /funds/{code}/predict?horizon=short|mid` -> `{code,horizon,as_of,up_probability,expected_return_pct,confidence}`
-- `GET /funds/{code}/explain?horizon=short|mid` -> `{code,horizon,confidence_interval_pct,top_factors[]}`
+- `GET /funds/{code}/explain?horizon=short|mid` -> `{code,horizon,confidence_interval_pct,top_factors[]}`（含行情+公告/舆情因子贡献）
+- `GET /funds/{code}/news-signal` -> `{code,trade_date,headline_count,sentiment_score,event_score,volume_shock,sample_title}`
 - `GET /user/watchlist` -> `[{user_id,fund_code}]`
 - `POST /user/watchlist` with `{fund_code}` -> `{user_id,fund_code}`
 - `GET /model/health` -> `{short_model_version,mid_model_version,last_train_at,coverage_rate}`

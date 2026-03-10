@@ -1,7 +1,7 @@
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models.entities import Fund, Prediction, Quote
+from app.models.entities import Fund, NewsSignalDaily, Prediction, Quote
 from app.services.fund_data_source import FundDataError, FundDataRateLimitError, fetch_latest_snapshot
 from app.services.predictor import rule_based_predictions
 
@@ -44,7 +44,23 @@ def refresh_fund_data(db: Session, code: str) -> Quote:
         existing_quote.daily_change_pct = snapshot.daily_change_pct
         existing_quote.volatility_20d = snapshot.volatility_20d
 
-    pred_values = rule_based_predictions(snapshot.daily_change_pct, snapshot.volatility_20d)
+    news_signal = db.scalar(
+        select(NewsSignalDaily)
+        .where(NewsSignalDaily.fund_code == code)
+        .order_by(NewsSignalDaily.trade_date.desc())
+        .limit(1)
+    )
+    sentiment_score = news_signal.sentiment_score if news_signal else 0.0
+    event_score = news_signal.event_score if news_signal else 0.0
+    volume_shock_score = news_signal.volume_shock if news_signal else 0.0
+
+    pred_values = rule_based_predictions(
+        snapshot.daily_change_pct,
+        snapshot.volatility_20d,
+        sentiment_score=sentiment_score,
+        event_score=event_score,
+        volume_shock_score=volume_shock_score,
+    )
     as_of = snapshot.as_of
     for horizon, payload in pred_values.items():
         row = db.scalar(select(Prediction).where(Prediction.fund_code == code, Prediction.horizon == horizon, Prediction.as_of == as_of))

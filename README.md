@@ -17,6 +17,7 @@
 - `GET /v1/funds/{code}/quote`
 - `GET /v1/funds/{code}/predict?horizon=short|mid`
 - `GET /v1/funds/{code}/explain?horizon=short|mid`
+- `GET /v1/funds/{code}/news-signal`
 - `GET /v1/user/watchlist`
 - `POST /v1/user/watchlist`
 - `GET /v1/model/health`
@@ -69,6 +70,7 @@ cd android
 - `FUND_MODEL_MID_VERSION=mid-v0.1`
 - `FUND_SOURCE_NAV_LIMIT_PER_MIN=90`
 - `FUND_SOURCE_SEARCH_LIMIT_PER_MIN=30`
+- `FUND_SOURCE_NEWS_LIMIT_PER_MIN=20`
 
 可选：
 - `FUND_REDIS_URL=<Upstash Redis URL>`（当前版本可不填）
@@ -85,9 +87,11 @@ cd android
 
 ## 当前模型实现
 - 规则基线预测：基于最新日涨跌与20日波动生成 short/mid 概率与预期涨幅
+- 舆情增强：每日抓取基金公告标题，进行关键词情绪与事件打分，参与预测修正
 - 真实净值来源：东方财富 `pingzhongdata/{fund_code}.js`
 - 基金搜索来源：本地库优先 + 东方财富 `fundcode_search.js` 远程补全并回写缓存
-- 已加每源每分钟限流（默认：净值 90/min，搜索 30/min；超限返回 429）
+- 公告来源：东方财富 `FundArchivesDatas.aspx?type=jjgg&code={fund_code}`
+- 已加每源每分钟限流（默认：净值 90/min，搜索 30/min，公告 20/min；超限返回 429）
 - 每日任务入口：`backend/app/workers/daily_job.py`
 
 ## 后续接入真实能力
