@@ -63,3 +63,73 @@ def test_ai_second_opinion_fallback_and_cache():
     assert first == second
 
     assert len(cache_rows) == 1
+
+
+def test_ai_second_opinion_budget_fallback():
+    db = _prepare_db()
+    old_enabled = settings.gemini_enabled
+    old_key = settings.gemini_api_key
+    old_model = settings.gemini_model
+    old_budget = settings.gemini_daily_budget_calls
+
+    settings.gemini_enabled = True
+    settings.gemini_api_key = "dummy-key"
+    settings.gemini_model = "gemini-2.0-flash"
+    settings.gemini_daily_budget_calls = 0
+
+    try:
+        payload = get_ai_second_opinion(db, code="110022", horizon="short")
+    finally:
+        settings.gemini_enabled = old_enabled
+        settings.gemini_api_key = old_key
+        settings.gemini_model = old_model
+        settings.gemini_daily_budget_calls = old_budget
+        db.close()
+
+    assert payload["provider"] == "gemini-fallback"
+    assert "预算" in payload["summary"]
+
+
+def test_ai_second_opinion_compliance_filter(monkeypatch):
+    db = _prepare_db()
+    old_enabled = settings.gemini_enabled
+    old_key = settings.gemini_api_key
+    old_model = settings.gemini_model
+    old_budget = settings.gemini_daily_budget_calls
+    old_filter = settings.gemini_compliance_filter_enabled
+
+    settings.gemini_enabled = True
+    settings.gemini_api_key = "dummy-key"
+    settings.gemini_model = "gemini-2.0-flash"
+    settings.gemini_daily_budget_calls = 10
+    settings.gemini_compliance_filter_enabled = True
+
+    def _mock_call_gemini(_context):
+        return (
+            {
+                "trend": "up",
+                "trend_strength": 88,
+                "agreement_with_model": "agree",
+                "key_reasons": ["这只基金必涨，稳赚机会"],
+                "risk_warnings": ["几乎无风险，建议重仓"],
+                "confidence_adjustment": 0.1,
+                "adjusted_up_probability": 0.8,
+                "summary": "该基金必涨且保本。",
+            },
+            '{"trend":"up"}',
+        )
+
+    monkeypatch.setattr("app.services.ai_second_opinion._call_gemini", _mock_call_gemini)
+    try:
+        payload = get_ai_second_opinion(db, code="110022", horizon="short")
+    finally:
+        settings.gemini_enabled = old_enabled
+        settings.gemini_api_key = old_key
+        settings.gemini_model = old_model
+        settings.gemini_daily_budget_calls = old_budget
+        settings.gemini_compliance_filter_enabled = old_filter
+        db.close()
+
+    assert payload["provider"] == "gemini"
+    assert "必涨" not in payload["summary"]
+    assert any("降级" in item for item in payload["risk_warnings"])

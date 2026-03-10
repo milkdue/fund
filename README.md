@@ -16,6 +16,7 @@
 - `GET /v1/funds/hot`
 - `GET /v1/funds/{code}/quote`
 - `GET /v1/funds/{code}/predict?horizon=short|mid`
+- `GET /v1/funds/{code}/prediction-change?horizon=short|mid`
 - `GET /v1/funds/{code}/explain?horizon=short|mid`
 - `GET /v1/funds/{code}/ai-judgement?horizon=short|mid`（Gemini 二级意见，失败自动回退到规则层）
 - `GET /v1/funds/{code}/kline`（净值估算趋势图数据，非真实OHLC）
@@ -24,14 +25,19 @@
 - `GET /v1/funds/{code}/feedback/summary?horizon=short|mid`
 - `GET /v1/user/watchlist`
 - `POST /v1/user/watchlist`
+- `GET /v1/user/watchlist/insights`
 - `GET /v1/user/alerts`
 - `POST /v1/user/alerts`
 - `GET /v1/user/alerts/check`
+- `POST /v1/user/events`
+- `GET /v1/user/weekly-report`
 - `GET /v1/model/health`
 - `GET /v1/model/backtest/latest?horizon=short|mid`
+- `GET /v1/model/backtest/walkforward?horizon=short|mid`
 - `GET /v1/model/ab/latest?horizon=short|mid`
 - `GET /v1/model/ab/summary?horizon=short|mid`
 - `GET /v1/system/data-sources`
+- `GET /v1/system/data-health`
 - `GET /v1/system/market-context`
 - `GET /healthz`
 
@@ -81,6 +87,8 @@ cd android
 - `FUND_AUTH_BEARER_TOKEN=<single-token>`
 - `FUND_AUTH_TOKEN_MAP=<token1:user1,token2:user2>`（可选，多用户映射；配置后优先）
 - `FUND_AUTH_DEFAULT_USER_ID=authorized-user`
+- `FUND_AUTH_USER_API_LIMIT_PER_MIN=120`
+- `FUND_AUTH_AUDIT_ENABLED=true`
 - `FUND_MODEL_SHORT_VERSION=short-v0.1`
 - `FUND_MODEL_MID_VERSION=mid-v0.1`
 - `FUND_MODEL_CANDIDATE_SHORT_VERSION=short-v0.2`
@@ -93,6 +101,8 @@ cd android
 - `FUND_GEMINI_TIMEOUT_MS=12000`
 - `FUND_GEMINI_MAX_OUTPUT_TOKENS=512`
 - `FUND_GEMINI_PROMPT_VERSION=v1`
+- `FUND_GEMINI_DAILY_BUDGET_CALLS=400`
+- `FUND_GEMINI_COMPLIANCE_FILTER_ENABLED=true`
 - `FUND_SOURCE_NAV_LIMIT_PER_MIN=90`
 - `FUND_SOURCE_SEARCH_LIMIT_PER_MIN=30`
 - `FUND_SOURCE_NEWS_LIMIT_PER_MIN=20`
@@ -106,7 +116,7 @@ cd android
 - 若连接串未带 `sslmode=require`，代码会自动补上。
 - 不要把 `.env`、`.env.local`、`.env.production` 推送到远程仓库（已在 `.gitignore`）。
 - 当 `FUND_AUTH_ENABLED=true` 时，以下接口需 `Authorization: Bearer <token>`：
-  `POST /v1/funds/{code}/feedback`、`/v1/user/watchlist*`、`/v1/user/alerts*`。
+  `POST /v1/funds/{code}/feedback`、`/v1/user/watchlist*`、`/v1/user/alerts*`、`/v1/user/events`、`/v1/user/weekly-report`。
 
 ### 每日自动刷新（Vercel Cron）
 - 已在 `vercel.json` 配置：`0 2 * * *`（每天 UTC 02:00）
@@ -121,10 +131,15 @@ cd android
 ## 当前模型实现
 - 规则基线预测：基于最新日涨跌与20日波动生成 short/mid 概率与预期涨幅
 - AI 二级意见：`/v1/funds/{code}/ai-judgement`，输入量化+市场+舆情+回测上下文，Gemini 不可用时自动降级规则输出
+- AI 治理：支持每日调用预算上限与合规措辞过滤（检测确定性承诺词并自动降级）
 - 舆情增强：每日抓取基金公告标题，进行关键词情绪与事件打分，参与预测修正
 - 风险提示增强：`explain` 返回风险标签（高波动、置信度偏低、舆情负面等）
 - 数据新鲜度：`quote/predict/explain` 返回 `data_freshness`（fresh/lagging/stale）
 - 周报机制：自动生成固定回测指标（准确率、AUC、F1、年化、回撤、夏普）
+- 可追溯快照：`predict` 返回 `snapshot_id/model_version/data_source`，支持历史变化比对
+- 漂移分析：`prediction-change` 返回与上次预测差异及因子变化
+- 可观测性：`system/data-health` 汇总覆盖率、新鲜度、数据源状态
+- 用户运营：行为事件采集与 `weekly-report` 周报
 - 市场因子：引入沪深300/中证500/创业板的市场与风格打分
 - 概率校准：对 `up_probability` 进行校准变换，减少过度自信
 - 反馈闭环：支持“本次预测是否有帮助”采集

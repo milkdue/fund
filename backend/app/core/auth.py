@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import Header, HTTPException
 
 from app.core.config import settings
+from app.services.source_rate_limiter import RateLimitExceededError, rate_limiter
 
 
 def _parse_token_map(raw: str | None) -> dict[str, str]:
@@ -33,7 +34,12 @@ def get_current_user_id(
 ) -> str:
     # Backward-compatible default mode.
     if not settings.auth_enabled:
-        return (x_user_id or "demo-user").strip() or "demo-user"
+        user_id = (x_user_id or "demo-user").strip() or "demo-user"
+        try:
+            rate_limiter.acquire_or_raise(f"user_api:{user_id}", settings.auth_user_api_limit_per_min)
+        except RateLimitExceededError as exc:
+            raise HTTPException(status_code=429, detail=f"user api throttled: {exc}") from exc
+        return user_id
 
     if not authorization:
         raise HTTPException(status_code=401, detail="authorization header required")
@@ -48,6 +54,10 @@ def get_current_user_id(
         user_id = token_map.get(token)
         if not user_id:
             raise HTTPException(status_code=401, detail="invalid bearer token")
+        try:
+            rate_limiter.acquire_or_raise(f"user_api:{user_id}", settings.auth_user_api_limit_per_min)
+        except RateLimitExceededError as exc:
+            raise HTTPException(status_code=429, detail=f"user api throttled: {exc}") from exc
         return user_id
 
     configured = (settings.auth_bearer_token or "").strip()
@@ -56,4 +66,9 @@ def get_current_user_id(
     if token != configured:
         raise HTTPException(status_code=401, detail="invalid bearer token")
 
-    return (x_user_id or settings.auth_default_user_id).strip() or settings.auth_default_user_id
+    user_id = (x_user_id or settings.auth_default_user_id).strip() or settings.auth_default_user_id
+    try:
+        rate_limiter.acquire_or_raise(f"user_api:{user_id}", settings.auth_user_api_limit_per_min)
+    except RateLimitExceededError as exc:
+        raise HTTPException(status_code=429, detail=f"user api throttled: {exc}") from exc
+    return user_id

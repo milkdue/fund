@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import datetime
+from datetime import UTC, date, datetime
 
 import httpx
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.models.entities import AiJudgementCache, Fund
+from app.models.entities import AiJudgementCache, AiUsageDaily, Fund
 from app.services.market_context_service import get_or_refresh_market_context
 from app.services.predictor import build_risk_flags, explain_features
 from app.services.repository import latest_backtest_report, latest_news_signal, latest_prediction, latest_quote
@@ -17,6 +17,12 @@ from app.services.repository import latest_backtest_report, latest_news_signal, 
 
 class AiSecondOpinionError(Exception):
     pass
+
+
+NON_COMPLIANT_PATTERNS = [
+    re.compile(r"(保本|稳赚|稳赚不赔|必涨|翻倍|躺赚|无风险)"),
+    re.compile(r"(guarantee|guaranteed|sure\s*win|risk[-\s]*free|100\s*%)", re.I),
+]
 
 
 def _clamp(value: float, low: float, high: float) -> float:
@@ -62,16 +68,17 @@ def _safe_list(raw_value, fallback: list[str]) -> list[str]:
     return values[:6]
 
 
+def _contains_non_compliant(text: str) -> bool:
+    content = (text or "").strip()
+    if not content:
+        return False
+    return any(p.search(content) for p in NON_COMPLIANT_PATTERNS)
+
+
 def _cache_model_name() -> str:
     if settings.gemini_enabled and settings.gemini_api_key:
         return settings.gemini_model
     return "fallback"
-
-
-def _cache_provider() -> str:
-    if settings.gemini_enabled and settings.gemini_api_key:
-        return "gemini"
-    return "fallback-rule"
 
 
 def _fallback_payload(
@@ -177,6 +184,100 @@ def _normalize_payload(
     }
 
 
+def _validate_gemini_payload(parsed: dict) -> None:
+    required_fields = {
+        "trend",
+        "trend_strength",
+        "agreement_with_model",
+        "key_reasons",
+        "risk_warnings",
+        "confidence_adjustment",
+        "adjusted_up_probability",
+        "summary",
+    }
+    missing = [k for k in required_fields if k not in parsed]
+    if missing:
+        raise AiSecondOpinionError(f"gemini json missing fields: {','.join(sorted(missing))}")
+    if not isinstance(parsed.get("key_reasons"), list) or not isinstance(parsed.get("risk_warnings"), list):
+        raise AiSecondOpinionError("gemini json list fields are invalid")
+
+
+def _apply_compliance_filter(payload: dict) -> dict:
+    if not settings.gemini_compliance_filter_enabled:
+        return payload
+
+    updated = dict(payload)
+    reasons = [str(i).strip()[:120] for i in updated.get("key_reasons", []) if str(i).strip()]
+    warnings = [str(i).strip()[:120] for i in updated.get("risk_warnings", []) if str(i).strip()]
+    summary = str(updated.get("summary", "")).strip()[:300]
+
+    flagged = False
+    if _contains_non_compliant(summary):
+        flagged = True
+        summary = "AI第二意见已触发合规降级：输出仅供学习研究参考，不构成投资建议。"
+
+    clean_reasons: list[str] = []
+    for item in reasons:
+        if _contains_non_compliant(item):
+            flagged = True
+            continue
+        clean_reasons.append(item)
+    if not clean_reasons:
+        clean_reasons = ["综合量化与市场因子后，给出非确定性参考意见"]
+
+    clean_warnings: list[str] = []
+    for item in warnings:
+        if _contains_non_compliant(item):
+            flagged = True
+            continue
+        clean_warnings.append(item)
+    if flagged:
+        clean_warnings.insert(0, "检测到确定性措辞，结果已按合规要求自动降级。")
+    if not clean_warnings:
+        clean_warnings = ["市场存在不确定性，请谨慎判断并控制风险。"]
+
+    updated["summary"] = summary or "AI第二意见已生成，请结合量化预测与风险提示综合判断。"
+    updated["key_reasons"] = list(dict.fromkeys(clean_reasons))[:6]
+    updated["risk_warnings"] = list(dict.fromkeys(clean_warnings))[:6]
+    return updated
+
+
+def _today_utc() -> date:
+    return datetime.now(tz=UTC).date()
+
+
+def _consume_ai_daily_budget(db: Session) -> bool:
+    if settings.gemini_daily_budget_calls <= 0:
+        return False
+
+    AiUsageDaily.__table__.create(bind=db.get_bind(), checkfirst=True)
+    usage_date = _today_utc()
+    row = db.scalar(
+        select(AiUsageDaily).where(
+            AiUsageDaily.usage_date == usage_date,
+            AiUsageDaily.provider == "gemini",
+            AiUsageDaily.model == settings.gemini_model,
+        )
+    )
+    used = int(row.call_count if row else 0)
+    if used >= settings.gemini_daily_budget_calls:
+        return False
+
+    if row:
+        row.call_count = used + 1
+    else:
+        db.add(
+            AiUsageDaily(
+                usage_date=usage_date,
+                provider="gemini",
+                model=settings.gemini_model,
+                call_count=1,
+            )
+        )
+    db.flush()
+    return True
+
+
 def _call_gemini(context: dict) -> tuple[dict, str]:
     if not settings.gemini_enabled or not settings.gemini_api_key:
         raise AiSecondOpinionError("gemini is not enabled")
@@ -229,6 +330,7 @@ def _call_gemini(context: dict) -> tuple[dict, str]:
     if not raw_text:
         raise AiSecondOpinionError("gemini empty text")
     parsed = _parse_json_text(raw_text)
+    _validate_gemini_payload(parsed)
     return parsed, raw_text
 
 
@@ -377,6 +479,9 @@ def get_ai_second_opinion(db: Session, code: str, horizon: str) -> dict:
         factors=factors,
         risk_flags=risk_flags,
     )
+    if settings.gemini_enabled and settings.gemini_api_key:
+        fallback["provider"] = "gemini-fallback"
+        fallback["model"] = settings.gemini_model
 
     payload = fallback
     raw_response: str | None = None
@@ -395,21 +500,32 @@ def get_ai_second_opinion(db: Session, code: str, horizon: str) -> dict:
             risk_flags=risk_flags,
             backtest=backtest,
         )
-        try:
-            parsed, raw_response = _call_gemini(context)
-            payload = _normalize_payload(
-                parsed=parsed,
-                code=code,
-                horizon=horizon,
-                as_of=pred.as_of,
-                data_freshness=data_freshness,
-                up_probability=float(pred.up_probability),
-                expected_return_pct=float(pred.expected_return_pct),
-                factors=factors,
-                risk_flags=risk_flags,
-            )
-        except AiSecondOpinionError:
+        budget_ok = _consume_ai_daily_budget(db)
+        if budget_ok:
+            try:
+                parsed, raw_response = _call_gemini(context)
+                payload = _normalize_payload(
+                    parsed=parsed,
+                    code=code,
+                    horizon=horizon,
+                    as_of=pred.as_of,
+                    data_freshness=data_freshness,
+                    up_probability=float(pred.up_probability),
+                    expected_return_pct=float(pred.expected_return_pct),
+                    factors=factors,
+                    risk_flags=risk_flags,
+                )
+                payload = _apply_compliance_filter(payload)
+            except AiSecondOpinionError:
+                payload = fallback
+        else:
             payload = fallback
+            payload["summary"] = "AI调用预算已达当日上限，当前返回规则降级结果（仅供学习研究）。"
+            payload["risk_warnings"] = list(
+                dict.fromkeys(
+                    ["AI预算已用尽，等待次日额度恢复。", *payload.get("risk_warnings", [])]
+                )
+            )[:6]
 
     cache_row = AiJudgementCache(
         fund_code=code,

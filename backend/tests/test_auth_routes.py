@@ -1,11 +1,6 @@
 from contextlib import contextmanager
 
-from fastapi.testclient import TestClient
-
 from app.core.config import settings
-from app.main import app
-
-client = TestClient(app)
 
 
 @contextmanager
@@ -33,19 +28,23 @@ def _auth_config(
         settings.auth_default_user_id = old_default
 
 
-def test_public_routes_still_open_when_auth_enabled():
+def test_public_routes_still_open_when_auth_enabled(client):
     with _auth_config(enabled=True, bearer="token-public"):
         res = client.get("/v1/funds/hot")
         assert res.status_code == 200
 
 
-def test_user_route_requires_auth_when_enabled():
+def test_user_route_requires_auth_when_enabled(client):
     with _auth_config(enabled=True, bearer="token-need-auth"):
         res = client.get("/v1/user/watchlist")
         assert res.status_code == 401
+        res2 = client.get("/v1/user/watchlist/insights")
+        assert res2.status_code == 401
+        res3 = client.post("/v1/user/events", json={"event_name": "app_open"})
+        assert res3.status_code == 401
 
 
-def test_user_route_accepts_valid_single_bearer():
+def test_user_route_accepts_valid_single_bearer(client):
     with _auth_config(enabled=True, bearer="token-one"):
         add = client.post(
             "/v1/user/watchlist",
@@ -58,8 +57,21 @@ def test_user_route_accepts_valid_single_bearer():
         assert add.status_code == 200
         assert add.json()["user_id"] == "tester-a"
 
+        insights = client.get(
+            "/v1/user/watchlist/insights",
+            headers={"Authorization": "Bearer token-one", "X-User-Id": "tester-a"},
+        )
+        assert insights.status_code == 200
 
-def test_user_route_accepts_token_map_and_sets_mapped_user():
+        event = client.post(
+            "/v1/user/events",
+            headers={"Authorization": "Bearer token-one", "X-User-Id": "tester-a"},
+            json={"event_name": "app_open"},
+        )
+        assert event.status_code == 200
+
+
+def test_user_route_accepts_token_map_and_sets_mapped_user(client):
     with _auth_config(enabled=True, token_map="tok-a:user-a,tok-b:user-b"):
         add = client.post(
             "/v1/user/watchlist",

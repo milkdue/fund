@@ -13,6 +13,8 @@ class Settings(BaseSettings):
     auth_bearer_token: str | None = None
     auth_token_map: str | None = None
     auth_default_user_id: str = "authorized-user"
+    auth_user_api_limit_per_min: int = 120
+    auth_audit_enabled: bool = True
     source_nav_limit_per_min: int = 90
     source_search_limit_per_min: int = 30
     source_news_limit_per_min: int = 20
@@ -30,6 +32,8 @@ class Settings(BaseSettings):
     gemini_timeout_ms: int = 12000
     gemini_max_output_tokens: int = 512
     gemini_prompt_version: str = "v1"
+    gemini_daily_budget_calls: int = 400
+    gemini_compliance_filter_enabled: bool = True
 
     model_config = SettingsConfigDict(env_prefix="FUND_", env_file=".env", extra="ignore")
 

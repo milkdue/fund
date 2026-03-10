@@ -7,6 +7,7 @@ from app.services.fund_data_source import FundDataError, FundDataRateLimitError,
 from app.services.alerts_service import evaluate_and_record_alert_events
 from app.services.prediction_ab_service import upsert_ab_result
 from app.services.predictor import candidate_rule_predictions, rule_based_predictions
+from app.services.prediction_snapshot_service import upsert_prediction_snapshot
 from app.core.config import settings
 
 
@@ -96,6 +97,27 @@ def refresh_fund_data(db: Session, code: str) -> Quote:
             row.up_probability = payload["up_probability"]
             row.expected_return_pct = payload["expected_return_pct"]
             row.confidence = payload["confidence"]
+
+        model_version = settings.model_short_version if horizon == "short" else settings.model_mid_version
+        upsert_prediction_snapshot(
+            db,
+            fund_code=code,
+            horizon=horizon,
+            as_of=as_of,
+            model_version=model_version,
+            data_source="eastmoney_pingzhongdata",
+            feature_payload={
+                "nav": snapshot.nav,
+                "daily_change_pct": snapshot.daily_change_pct,
+                "volatility_20d": snapshot.volatility_20d,
+                "sentiment_score": sentiment_score,
+                "event_score": event_score,
+                "volume_shock_score": volume_shock_score,
+                "market_score": market_ctx.market_score,
+                "style_score": market_ctx.style_score,
+                "market_degraded": market_ctx.source_degraded,
+            },
+        )
 
         db.flush()
 

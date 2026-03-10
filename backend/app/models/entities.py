@@ -204,3 +204,62 @@ class AiJudgementCache(Base):
     raw_response: Mapped[str | None] = mapped_column(String(8192), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class PredictionSnapshot(Base):
+    __tablename__ = "prediction_snapshots"
+    __table_args__ = (
+        UniqueConstraint("fund_code", "horizon", "as_of", name="uq_pred_snapshot_fund_horizon_as_of"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    snapshot_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    fund_code: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
+    horizon: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
+    as_of: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
+    model_version: Mapped[str] = mapped_column(String(64), nullable=False, default="unknown")
+    data_source: Mapped[str] = mapped_column(String(64), nullable=False, default="eastmoney")
+    feature_payload_json: Mapped[str] = mapped_column(String(8192), nullable=False, default="{}")
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+
+
+class AiUsageDaily(Base):
+    __tablename__ = "ai_usage_daily"
+    __table_args__ = (
+        UniqueConstraint("usage_date", "provider", "model", name="uq_ai_usage_daily_key"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    usage_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    provider: Mapped[str] = mapped_column(String(32), nullable=False, default="gemini")
+    model: Mapped[str] = mapped_column(String(64), nullable=False, default="unknown")
+    call_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class ApiAuditLog(Base):
+    __tablename__ = "api_audit_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    endpoint: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    method: Mapped[str] = mapped_column(String(8), nullable=False, default="GET")
+    status_code: Mapped[int] = mapped_column(Integer, nullable=False, default=200)
+    detail: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow, index=True)
+
+
+class UserEvent(Base):
+    __tablename__ = "user_events"
+    __table_args__ = (
+        UniqueConstraint("user_id", "event_name", "event_day", "fund_code", name="uq_user_event_day_key"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    event_name: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    fund_code: Mapped[str | None] = mapped_column(String(16), nullable=True, index=True)
+    event_day: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    metadata_json: Mapped[str] = mapped_column(String(2048), nullable=False, default="{}")
+    count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
