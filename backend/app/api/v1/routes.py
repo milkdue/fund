@@ -3,13 +3,13 @@ import json
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_user_id
 from app.core.config import settings
 from app.db.session import get_db
-from app.models.entities import Prediction, PredictionSnapshot
+from app.models.entities import AlertEvent, Prediction, PredictionSnapshot
 from app.schemas.fund import (
     AbCompareItem,
     AbSummaryResponse,
@@ -17,6 +17,8 @@ from app.schemas.fund import (
     AlertCheckResponse,
     AlertEventItem,
     AlertHitItem,
+    AlertPushTestIn,
+    AlertPushTestResponse,
     AlertRuleIn,
     AlertRuleItem,
     BacktestMetrics,
@@ -57,6 +59,7 @@ from app.services.market_sync import MarketSyncError, MarketSyncRateLimitError, 
 from app.services.model_ab_service import ab_summary, list_latest_ab_results
 from app.services.news_sync import NewsSyncError, NewsSyncRateLimitError, refresh_news_signals_for_code
 from app.services.ai_second_opinion import AiSecondOpinionError, get_ai_second_opinion
+from app.services.alert_push_service import push_bark_message
 from app.services.predictor import build_risk_flags, confidence_interval, explain_features
 from app.services.fund_search_source import FundSearchError, FundSearchRateLimitError, remote_search_funds
 from app.services.fund_data_source import FundDataError, fetch_kline_points
@@ -803,6 +806,64 @@ def user_alert_events_get(
         )
         for row in rows
     ]
+
+
+@router.post("/user/alerts/push-test", response_model=AlertPushTestResponse)
+def user_alert_push_test(
+    payload: AlertPushTestIn,
+    user_id: str = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    event_id: int | None = None
+    if payload.emit_event:
+        next_rule_id = int((db.scalar(select(func.max(AlertEvent.rule_id))) or 0) + 1)
+        next_prediction_id = int((db.scalar(select(func.max(AlertEvent.prediction_id))) or 0) + 1)
+        event = AlertEvent(
+            rule_id=max(1, next_rule_id),
+            prediction_id=max(1, next_prediction_id),
+            user_id=user_id,
+            fund_code=payload.fund_code[:16],
+            horizon=payload.horizon,
+            message=payload.message[:256],
+        )
+        db.add(event)
+        db.commit()
+        db.refresh(event)
+        event_id = event.id
+
+    sent = push_bark_message(title=payload.title, body=payload.message)
+    bark_enabled = bool(settings.bark_enabled and (settings.bark_user_key or "").strip())
+
+    detail: str | None = None
+    if not bark_enabled:
+        detail = "bark disabled or user key missing"
+    elif not sent:
+        detail = "bark request failed"
+
+    _track_event_safe(
+        db,
+        user_id=user_id,
+        event_name="alerts_push_test",
+        fund_code=payload.fund_code,
+        metadata={"sent": sent, "emit_event": payload.emit_event, "event_id": event_id},
+    )
+    _audit_safe(
+        db,
+        user_id=user_id,
+        endpoint="/v1/user/alerts/push-test",
+        method="POST",
+        status_code=200,
+        detail=f"sent={sent},event_id={event_id or 0}",
+    )
+
+    return AlertPushTestResponse(
+        ok=bool(sent or event_id),
+        sent=sent,
+        bark_enabled=bark_enabled,
+        user_id=user_id,
+        event_id=event_id,
+        detail=detail,
+    )
 
 
 @router.post("/user/events", response_model=UserEventResponse)

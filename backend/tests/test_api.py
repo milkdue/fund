@@ -46,6 +46,52 @@ def test_watchlist_flow(client):
     assert isinstance(events.json(), list)
 
 
+def test_alert_push_test_endpoint(client, monkeypatch):
+    from app.core.config import settings
+
+    old_bark_enabled = settings.bark_enabled
+    old_bark_key = settings.bark_user_key
+    settings.bark_enabled = True
+    settings.bark_user_key = "dummy-test-key"
+    called: dict[str, str] = {}
+
+    def _mock_push(*, title: str, body: str) -> bool:
+        called["title"] = title
+        called["body"] = body
+        return True
+
+    monkeypatch.setattr("app.api.v1.routes.push_bark_message", _mock_push)
+    headers = {"X-User-Id": "android-user"}
+    try:
+        res = client.post(
+            "/v1/user/alerts/push-test",
+            headers=headers,
+            json={
+                "title": "提醒测试",
+                "message": "这是测试推送",
+                "fund_code": "110022",
+                "horizon": "short",
+                "emit_event": True,
+            },
+        )
+        assert res.status_code == 200
+        payload = res.json()
+        assert payload["ok"] is True
+        assert payload["sent"] is True
+        assert payload["bark_enabled"] is True
+        assert payload["event_id"] is not None
+        assert called["title"] == "提醒测试"
+        assert called["body"] == "这是测试推送"
+
+        events = client.get("/v1/user/alerts/events", headers=headers)
+        assert events.status_code == 200
+        event_ids = {item["id"] for item in events.json()}
+        assert payload["event_id"] in event_ids
+    finally:
+        settings.bark_enabled = old_bark_enabled
+        settings.bark_user_key = old_bark_key
+
+
 def test_hot_and_data_sources(client):
     hot = client.get("/v1/funds/hot")
     assert hot.status_code == 200

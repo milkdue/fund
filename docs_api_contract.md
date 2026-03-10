@@ -13,6 +13,7 @@ Base path: `/v1`
   - `POST /user/alerts`
   - `GET /user/alerts/check`
   - `GET /user/alerts/events`
+  - `POST /user/alerts/push-test`
   - `POST /user/events`
   - `GET /user/weekly-report`
 - Public行情与模型查询接口保持匿名可访问（如 `search/quote/predict/explain/kline/news-signal/model/*/system/*`）。
@@ -52,6 +53,7 @@ When upstream source rate limit is hit, API returns HTTP `429` with standard err
 - `POST /user/alerts` -> upsert alert rule
 - `GET /user/alerts/check` -> triggered alert items
 - `GET /user/alerts/events?limit=30` -> pushed/triggered alert event history
+- `POST /user/alerts/push-test` with `{title,message,fund_code,horizon,emit_event}` -> `{ok,sent,bark_enabled,user_id,event_id,detail}`
 - `POST /user/events` with `{event_name,fund_code?,metadata?}` -> `{id,count,event_day}`
 - `GET /user/weekly-report` -> `{user_id,from_date,to_date,audit_requests,event_counts,feedback_total,feedback_helpful_rate,alert_hits}`
 - `GET /model/health` -> `{short_model_version,mid_model_version,last_train_at,coverage_rate}`

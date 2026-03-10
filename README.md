@@ -30,6 +30,7 @@
 - `POST /v1/user/alerts`
 - `GET /v1/user/alerts/check`
 - `GET /v1/user/alerts/events`
+- `POST /v1/user/alerts/push-test`
 - `POST /v1/user/events`
 - `GET /v1/user/weekly-report`
 - `GET /v1/model/health`

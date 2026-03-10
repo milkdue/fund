@@ -181,6 +181,23 @@ class AlertEventItem(BaseModel):
     created_at: datetime
 
 
+class AlertPushTestIn(BaseModel):
+    title: str = Field(default="基金提醒测试", max_length=120)
+    message: str = Field(default="这是一条测试提醒消息", max_length=256)
+    fund_code: str = Field(default="TEST001", max_length=16)
+    horizon: str = Field(default="short", pattern="^(short|mid)$")
+    emit_event: bool = True
+
+
+class AlertPushTestResponse(BaseModel):
+    ok: bool
+    sent: bool
+    bark_enabled: bool
+    user_id: str
+    event_id: int | None = None
+    detail: str | None = None
+
+
 class AbCompareItem(BaseModel):
     fund_code: str
     horizon: str
