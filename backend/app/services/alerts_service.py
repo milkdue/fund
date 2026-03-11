@@ -66,9 +66,9 @@ def _is_triggered(rule: AlertRule, pred: Prediction) -> bool:
 
 
 def _freshness(as_of) -> str:
-    from datetime import datetime
+    from app.services.time_utils import shanghai_now_naive
 
-    delta_hours = (datetime.utcnow() - as_of).total_seconds() / 3600
+    delta_hours = (shanghai_now_naive() - as_of).total_seconds() / 3600
     if delta_hours <= 36:
         return "fresh"
     if delta_hours <= 72:

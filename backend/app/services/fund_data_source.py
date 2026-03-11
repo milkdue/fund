@@ -8,6 +8,7 @@ import httpx
 
 from app.core.config import settings
 from app.services.source_rate_limiter import RateLimitExceededError, rate_limiter
+from app.services.time_utils import epoch_ms_to_shanghai_naive
 
 PINGZHONGDATA_URL = "https://fund.eastmoney.com/pingzhongdata/{code}.js?v={version}"
 
@@ -136,7 +137,7 @@ def fetch_latest_snapshot(code: str, timeout_seconds: float = 8.0) -> FundMarket
 
     last_point = sorted_points[-1]
     ts_millis = int(last_point.get("x", 0))
-    as_of = datetime.fromtimestamp(ts_millis / 1000, tz=UTC).replace(tzinfo=None)
+    as_of = epoch_ms_to_shanghai_naive(ts_millis)
 
     return FundMarketSnapshot(
         code=code,
@@ -170,7 +171,7 @@ def fetch_kline_points(code: str, days: int = 60, timeout_seconds: float = 8.0) 
         low = min(open_price, close) * (1.0 - wick_pct)
         candles.append(
             KlinePoint(
-                ts=datetime.fromtimestamp(ts_millis / 1000, tz=UTC).replace(tzinfo=None),
+                ts=epoch_ms_to_shanghai_naive(ts_millis),
                 open=round(open_price, 4),
                 high=round(high, 4),
                 low=round(low, 4),

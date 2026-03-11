@@ -13,6 +13,7 @@ from app.models.entities import AiJudgementCache, AiUsageDaily, Fund
 from app.services.market_context_service import get_or_refresh_market_context
 from app.services.predictor import build_risk_flags, explain_features
 from app.services.repository import latest_backtest_report, latest_news_signal, latest_prediction, latest_quote
+from app.services.time_utils import shanghai_now_naive
 
 
 class AiSecondOpinionError(Exception):
@@ -30,7 +31,7 @@ def _clamp(value: float, low: float, high: float) -> float:
 
 
 def _freshness(as_of: datetime) -> str:
-    delta_hours = (datetime.utcnow() - as_of).total_seconds() / 3600
+    delta_hours = (shanghai_now_naive() - as_of).total_seconds() / 3600
     if delta_hours <= 36:
         return "fresh"
     if delta_hours <= 72:

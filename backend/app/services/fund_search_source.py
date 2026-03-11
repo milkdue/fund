@@ -8,6 +8,7 @@ from app.core.config import settings
 from app.services.source_rate_limiter import RateLimitExceededError, rate_limiter
 
 FUNDCODE_SEARCH_URL = "https://fund.eastmoney.com/js/fundcode_search.js"
+UNSUPPORTED_NAME_MARKERS = ("(后端)", "（后端）")
 
 
 @dataclass
@@ -35,6 +36,11 @@ def _extract_list(script: str) -> list[list[str]]:
         return json.loads(raw)
     except json.JSONDecodeError as exc:
         raise FundSearchError(f"search payload json decode failed: {exc}") from exc
+
+
+def _is_supported_result(name: str) -> bool:
+    normalized = name.strip()
+    return normalized != "" and not any(marker in normalized for marker in UNSUPPORTED_NAME_MARKERS)
 
 
 def remote_search_funds(query: str, timeout_seconds: float = 8.0, limit: int = 20) -> list[FundSearchResult]:
@@ -70,6 +76,8 @@ def remote_search_funds(query: str, timeout_seconds: float = 8.0, limit: int = 2
         if len(row) < 4:
             continue
         code, _, name, category = row[0], row[1], row[2], row[3]
+        if not _is_supported_result(name):
+            continue
         if lowered in code.lower() or lowered in name.lower():
             results.append(FundSearchResult(code=code, name=name, category=category or "未分类"))
         if len(results) >= limit:

@@ -80,6 +80,7 @@ from app.services.repository import (
 )
 from app.services.user_ops_service import track_user_event, weekly_user_report, write_api_audit
 from app.services.walkforward_service import build_walkforward_report
+from app.services.time_utils import shanghai_now_naive
 from app.workers.daily_job import run_daily_refresh
 from app.workers.weekly_job import run_weekly_backtest
 
@@ -103,7 +104,7 @@ def _refresh_news_signal_soft(db: Session, code: str) -> None:
 
 
 def _freshness(as_of: datetime) -> str:
-    delta_hours = (datetime.utcnow() - as_of).total_seconds() / 3600
+    delta_hours = (shanghai_now_naive() - as_of).total_seconds() / 3600
     if delta_hours <= 36:
         return "fresh"
     if delta_hours <= 72:

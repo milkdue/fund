@@ -1,17 +1,18 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models.entities import Fund, MarketIndexDaily, NewsSignalDaily, Prediction, Quote
+from app.services.time_utils import shanghai_now_naive
 
 
 def _freshness_label(as_of: datetime | None) -> str:
     if as_of is None:
         return "stale"
-    delta_hours = (datetime.utcnow() - as_of).total_seconds() / 3600
+    delta_hours = (shanghai_now_naive() - as_of).total_seconds() / 3600
     if delta_hours <= 36:
         return "fresh"
     if delta_hours <= 72:
@@ -20,7 +21,7 @@ def _freshness_label(as_of: datetime | None) -> str:
 
 
 def build_data_health_summary(db: Session) -> dict:
-    now = datetime.now(tz=UTC).replace(tzinfo=None)
+    now = shanghai_now_naive()
     fund_total = int(db.scalar(select(func.count(Fund.code))) or 0)
 
     latest_quote_ts = db.scalar(select(func.max(Quote.as_of)))

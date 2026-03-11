@@ -12,6 +12,12 @@ from app.services.market_sync import MarketSyncError, refresh_fund_data
 from app.services.news_sync import NewsSyncError, NewsSyncRateLimitError, refresh_news_signals_for_code
 
 DEFAULT_CODES = ["110022", "161725", "005827"]
+UNSUPPORTED_NAME_MARKERS = ("(后端)", "（后端）")
+
+
+def _is_supported_fund_name(name: str | None) -> bool:
+    normalized = (name or "").strip()
+    return normalized != "" and not any(marker in normalized for marker in UNSUPPORTED_NAME_MARKERS)
 
 
 @dataclass
@@ -52,14 +58,28 @@ def _build_pacer() -> _SourcePacer:
 def run_daily_refresh(codes: list[str] | None = None) -> dict:
     started_at = time.monotonic()
     db = SessionLocal()
-    target_codes = codes or [*DEFAULT_CODES]
+    target_codes = list(dict.fromkeys(codes or [*DEFAULT_CODES]))
     pacer = _build_pacer()
+    skipped_unsupported_codes: list[str] = []
 
     try:
-        existing_codes = list(db.scalars(select(Fund.code)))
-        for code in existing_codes:
-            if code not in target_codes:
-                target_codes.append(code)
+        if codes is None:
+            existing_funds = list(db.scalars(select(Fund)))
+            for fund in existing_funds:
+                if not _is_supported_fund_name(fund.name):
+                    skipped_unsupported_codes.append(fund.code)
+                    continue
+                if fund.code not in target_codes:
+                    target_codes.append(fund.code)
+        else:
+            filtered_codes: list[str] = []
+            for code in target_codes:
+                fund = db.scalar(select(Fund).where(Fund.code == code))
+                if fund and not _is_supported_fund_name(fund.name):
+                    skipped_unsupported_codes.append(code)
+                    continue
+                filtered_codes.append(code)
+            target_codes = filtered_codes
 
         market_status = "ok"
         try:
@@ -101,6 +121,7 @@ def run_daily_refresh(codes: list[str] | None = None) -> dict:
         "failed_codes": failed,
         "news_success_count": news_success,
         "news_failed_codes": news_failed,
+        "skipped_unsupported_codes": skipped_unsupported_codes,
         "elapsed_seconds": round(time.monotonic() - started_at, 2),
     }
 

@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.models.entities import MarketIndexDaily
 from app.services.market_index_source import INDEX_DEFS, MarketIndexError, MarketIndexRateLimitError, fetch_index_snapshot
+from app.services.time_utils import shanghai_now_naive
 
 
 @dataclass
@@ -29,7 +30,7 @@ class MarketContextRateLimitError(MarketContextError):
 def _freshness(as_of: datetime | None) -> str:
     if as_of is None:
         return "stale"
-    delta_hours = (datetime.utcnow() - as_of).total_seconds() / 3600
+    delta_hours = (shanghai_now_naive() - as_of).total_seconds() / 3600
     if delta_hours <= 36:
         return "fresh"
     if delta_hours <= 72:
