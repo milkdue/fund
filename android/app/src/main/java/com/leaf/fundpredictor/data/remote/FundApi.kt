@@ -28,6 +28,7 @@ data class ScoreComponentDto(
     val label: String,
     val score: Int,
     val summary: String,
+    @Json(name = "detail_lines") val detailLines: List<String> = emptyList(),
 )
 
 @JsonClass(generateAdapter = true)
@@ -142,6 +143,8 @@ data class WatchlistInsightDto(
     @Json(name = "risk_score") val riskScore: Int? = null,
     @Json(name = "action_label") val actionLabel: String = "观察",
     @Json(name = "score_summary") val scoreSummary: String = "",
+    @Json(name = "short_scorecard") val shortScorecard: ScoreCardDto? = null,
+    @Json(name = "mid_scorecard") val midScorecard: ScoreCardDto? = null,
     @Json(name = "data_freshness") val dataFreshness: String,
     @Json(name = "risk_level") val riskLevel: String,
     val signal: String,

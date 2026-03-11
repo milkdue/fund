@@ -23,6 +23,7 @@ class ScoreComponentResponse(BaseModel):
     label: str
     score: int = Field(ge=0, le=100)
     summary: str
+    detail_lines: list[str] = Field(default_factory=list)
 
 
 class ScoreCardResponse(BaseModel):
@@ -310,6 +311,8 @@ class WatchlistInsightItem(BaseModel):
     risk_score: int | None = Field(default=None, ge=0, le=100)
     action_label: str = "观察"
     score_summary: str = ""
+    short_scorecard: ScoreCardResponse | None = None
+    mid_scorecard: ScoreCardResponse | None = None
     data_freshness: str = "stale"
     risk_level: str
     signal: str

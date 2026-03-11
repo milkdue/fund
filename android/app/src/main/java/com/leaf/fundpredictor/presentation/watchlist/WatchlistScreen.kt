@@ -23,6 +23,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -31,13 +32,18 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.leaf.fundpredictor.domain.model.ScoreCard
 import com.leaf.fundpredictor.domain.model.WatchlistInsight
 import com.leaf.fundpredictor.domain.model.WatchlistItem
+import com.leaf.fundpredictor.presentation.components.LabelWithTooltip
 import com.leaf.fundpredictor.presentation.components.ListSkeleton
 import com.leaf.fundpredictor.presentation.components.MotionReveal
 
@@ -49,6 +55,7 @@ fun WatchlistScreen(
     onOpenDetail: (String) -> Unit,
 ) {
     val state by viewModel.uiState.collectAsState()
+    var scoreSheet by remember { mutableStateOf<WatchlistScoreSheetState?>(null) }
 
     LaunchedEffect(Unit) { viewModel.load() }
 
@@ -120,6 +127,29 @@ fun WatchlistScreen(
                                 WatchlistInsightCard(
                                     item = item,
                                     hasAlert = state.alertFundCodes.contains(item.fundCode),
+                                    onOpenShortScore = {
+                                        item.shortScorecard?.let { card ->
+                                            scoreSheet = WatchlistScoreSheetState(
+                                                title = "${item.fundCode} · 短期评分依据",
+                                                scorecard = card,
+                                            )
+                                        }
+                                    },
+                                    onOpenMidScore = {
+                                        item.midScorecard?.let { card ->
+                                            scoreSheet = WatchlistScoreSheetState(
+                                                title = "${item.fundCode} · 中期评分依据",
+                                                scorecard = card,
+                                            )
+                                        }
+                                    },
+                                    onOpenAction = {
+                                        val card = item.shortScorecard ?: item.midScorecard ?: return@WatchlistInsightCard
+                                        scoreSheet = WatchlistScoreSheetState(
+                                            title = "${item.fundCode} · 评分依据",
+                                            scorecard = card,
+                                        )
+                                    },
                                     onClick = { onOpenDetail(item.fundCode) },
                                 )
                             }
@@ -137,9 +167,22 @@ fun WatchlistScreen(
                     }
                 }
             }
+
+            scoreSheet?.let { sheet ->
+                WatchlistScoreExplanationSheet(
+                    title = sheet.title,
+                    scorecard = sheet.scorecard,
+                    onDismiss = { scoreSheet = null },
+                )
+            }
         }
     }
 }
+
+private data class WatchlistScoreSheetState(
+    val title: String,
+    val scorecard: ScoreCard,
+)
 
 @Composable
 private fun OverviewCard(size: Int) {
@@ -174,6 +217,9 @@ private fun OverviewCard(size: Int) {
 private fun WatchlistInsightCard(
     item: WatchlistInsight,
     hasAlert: Boolean,
+    onOpenShortScore: () -> Unit,
+    onOpenMidScore: () -> Unit,
+    onOpenAction: () -> Unit,
     onClick: () -> Unit,
 ) {
     Card(
@@ -217,18 +263,24 @@ private fun WatchlistInsightCard(
                     label = "短期评分",
                     value = scoreOrDash(item.shortScore),
                     color = scoreColor(item.shortScore),
+                    tooltip = "短期评分综合了方向、空间、市场、舆情、风险和可信度。${item.scoreSummary}",
+                    onClick = if (item.shortScorecard != null) onOpenShortScore else null,
                 )
                 InsightPill(
                     modifier = Modifier.weight(1f),
                     label = "中期评分",
                     value = scoreOrDash(item.midScore),
                     color = scoreColor(item.midScore),
+                    tooltip = "中期评分更看趋势延续、市场环境和风险控制。${item.scoreSummary}",
+                    onClick = if (item.midScorecard != null) onOpenMidScore else null,
                 )
                 InsightPill(
                     modifier = Modifier.weight(1f),
                     label = "行动标签",
                     value = item.actionLabel,
                     color = actionLabelColor(item.actionLabel),
+                    tooltip = actionLabelTooltip(item.actionLabel),
+                    onClick = if (item.shortScorecard != null || item.midScorecard != null) onOpenAction else null,
                 )
             }
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -267,9 +319,11 @@ private fun InsightPill(
     label: String,
     value: String,
     color: Color,
+    tooltip: String? = null,
+    onClick: (() -> Unit)? = null,
 ) {
     Card(
-        modifier = modifier,
+        modifier = if (onClick != null) modifier.clickable(onClick = onClick) else modifier,
         colors = CardDefaults.cardColors(containerColor = color.copy(alpha = 0.12f)),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
@@ -277,8 +331,94 @@ private fun InsightPill(
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
-            Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (tooltip.isNullOrBlank()) {
+                Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            } else {
+                LabelWithTooltip(
+                    label = label,
+                    tooltip = tooltip,
+                    labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             Text(value, style = MaterialTheme.typography.titleSmall, color = color)
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun WatchlistScoreExplanationSheet(
+    title: String,
+    scorecard: ScoreCard,
+    onDismiss: () -> Unit,
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = Color(0xFFF9FBFF),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(title, style = MaterialTheme.typography.titleLarge)
+            Text(
+                "${scorecard.actionLabel} · 综合 ${scorecard.totalScore} · 风险 ${scorecard.riskScore}",
+                style = MaterialTheme.typography.titleSmall,
+                color = actionLabelColor(scorecard.actionLabel),
+            )
+            Text(
+                scorecard.summary,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            scorecard.components.forEach { component ->
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            LabelWithTooltip(
+                                label = component.label,
+                                tooltip = component.summary,
+                            )
+                            Text(
+                                "${component.score}",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = scoreColor(component.score),
+                            )
+                        }
+                        Text(
+                            component.summary,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        if (component.detailLines.isNotEmpty()) {
+                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                component.detailLines.forEach { line ->
+                                    Text(
+                                        "• $line",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Box(modifier = Modifier.padding(bottom = 18.dp))
         }
     }
 }
@@ -371,6 +511,16 @@ private fun actionLabelColor(value: String): Color {
         "观察" -> Color(0xFFB26A00)
         "回避" -> Color(0xFFC62828)
         else -> Color(0xFF70757F)
+    }
+}
+
+private fun actionLabelTooltip(value: String): String {
+    return when (value) {
+        "强关注" -> "强关注表示综合评分处于高位，方向和风险控制都相对更优。"
+        "关注" -> "关注表示信号整体较好，但还没有强到最高优先级。"
+        "观察" -> "观察表示当前仍有不确定性，更适合持续跟踪。"
+        "回避" -> "回避表示当前信号和风险收益比不理想。"
+        else -> "行动标签用于快速总结当前评分结论。"
     }
 }
 

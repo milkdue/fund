@@ -31,18 +31,22 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.geometry.Offset
@@ -55,6 +59,7 @@ import com.leaf.fundpredictor.domain.model.KlineCandle
 import com.leaf.fundpredictor.domain.model.Prediction
 import com.leaf.fundpredictor.domain.model.PredictionChange
 import com.leaf.fundpredictor.domain.model.Quote
+import com.leaf.fundpredictor.domain.model.ScoreComponent
 import com.leaf.fundpredictor.presentation.components.LabelWithTooltip
 import com.leaf.fundpredictor.presentation.components.ListSkeleton
 import com.leaf.fundpredictor.presentation.components.MotionReveal
@@ -426,6 +431,7 @@ private fun PredictionCard(title: String, prediction: Prediction) {
         animationSpec = tween(durationMillis = 900),
         label = "confidence_progress",
     )
+    var showScoreSheet by remember { mutableStateOf(false) }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -465,18 +471,21 @@ private fun PredictionCard(title: String, prediction: Prediction) {
                     label = "综合评分",
                     value = "${prediction.scorecard.totalScore}",
                     color = actionColor(prediction.scorecard.actionLabel),
+                    tooltip = prediction.scorecard.summary,
                 )
                 ScorePill(
                     modifier = Modifier.weight(1f),
                     label = "风险分",
                     value = "${prediction.scorecard.riskScore}",
                     color = riskScoreColor(prediction.scorecard.riskScore),
+                    tooltip = "风险分越高，代表波动、数据质量和模型分歧带来的风险越低。当前风险分 ${prediction.scorecard.riskScore}。",
                 )
                 ScorePill(
                     modifier = Modifier.weight(1f),
                     label = "行动标签",
                     value = prediction.scorecard.actionLabel,
                     color = actionColor(prediction.scorecard.actionLabel),
+                    tooltip = actionLabelTooltip(prediction.scorecard.actionLabel),
                 )
             }
             Text(
@@ -484,6 +493,12 @@ private fun PredictionCard(title: String, prediction: Prediction) {
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            TextButton(
+                onClick = { showScoreSheet = true },
+                modifier = Modifier.align(Alignment.End),
+            ) {
+                Text("查看评分依据")
+            }
             if (prediction.scorecard.components.isNotEmpty()) {
                 Text("评分拆解", style = MaterialTheme.typography.titleSmall)
                 Row(
@@ -496,6 +511,7 @@ private fun PredictionCard(title: String, prediction: Prediction) {
                             label = component.label,
                             value = "${component.score}",
                             color = componentColor(component.score),
+                            tooltip = component.summary,
                         )
                     }
                 }
@@ -510,6 +526,7 @@ private fun PredictionCard(title: String, prediction: Prediction) {
                                 label = component.label,
                                 value = "${component.score}",
                                 color = componentColor(component.score),
+                                tooltip = component.summary,
                             )
                         }
                         repeat((3 - tail.size).coerceAtLeast(0)) {
@@ -519,6 +536,14 @@ private fun PredictionCard(title: String, prediction: Prediction) {
                 }
             }
         }
+    }
+
+    if (showScoreSheet) {
+        ScoreExplanationSheet(
+            title = title,
+            prediction = prediction,
+            onDismiss = { showScoreSheet = false },
+        )
     }
 }
 
@@ -613,6 +638,7 @@ private fun ScorePill(
     label: String,
     value: String,
     color: Color,
+    tooltip: String? = null,
 ) {
     Card(
         modifier = modifier,
@@ -625,8 +651,98 @@ private fun ScorePill(
                 .padding(horizontal = 10.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
-            Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (tooltip.isNullOrBlank()) {
+                Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            } else {
+                LabelWithTooltip(
+                    label = label,
+                    tooltip = tooltip,
+                    labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             Text(value, style = MaterialTheme.typography.titleSmall, color = color)
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ScoreExplanationSheet(
+    title: String,
+    prediction: Prediction,
+    onDismiss: () -> Unit,
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = Color(0xFFF9FBFF),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(title, style = MaterialTheme.typography.titleLarge)
+            Text(
+                "${prediction.scorecard.actionLabel} · 综合 ${prediction.scorecard.totalScore} · 风险 ${prediction.scorecard.riskScore}",
+                style = MaterialTheme.typography.titleSmall,
+                color = actionColor(prediction.scorecard.actionLabel),
+            )
+            Text(
+                prediction.scorecard.summary,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            prediction.scorecard.components.forEach { component ->
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            LabelWithTooltip(
+                                label = component.label,
+                                tooltip = component.summary,
+                            )
+                            Text(
+                                "${component.score}",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = componentColor(component.score),
+                            )
+                        }
+                        Text(
+                            component.summary,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        ScoreDetailLines(component)
+                    }
+                }
+            }
+            Box(modifier = Modifier.padding(bottom = 18.dp))
+        }
+    }
+}
+
+@Composable
+private fun ScoreDetailLines(component: ScoreComponent) {
+    if (component.detailLines.isEmpty()) return
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        component.detailLines.forEach { line ->
+            Text(
+                "• $line",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
@@ -841,6 +957,16 @@ private fun actionColor(label: String): Color {
         "观察" -> Color(0xFFB26A00)
         "回避" -> Color(0xFFC62828)
         else -> Color(0xFF596072)
+    }
+}
+
+private fun actionLabelTooltip(label: String): String {
+    return when (label) {
+        "强关注" -> "强关注表示方向、空间和风险控制三项同时较优，可以优先放进观察列表。"
+        "关注" -> "关注表示信号整体较好，但还没有到最强区间。"
+        "观察" -> "观察表示当前有部分积极因素，但还不足以支持更积极动作。"
+        "回避" -> "回避表示风险、分歧或预期收益不够理想，当前更适合少动。"
+        else -> "行动标签用于把复杂评分结果压缩成更容易理解的结论。"
     }
 }
 

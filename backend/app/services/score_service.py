@@ -10,6 +10,7 @@ class ScoreComponentResult:
     label: str
     score: int
     summary: str
+    detail_lines: list[str]
 
 
 @dataclass
@@ -53,6 +54,28 @@ def _agreement_score(value: str | None) -> float:
     if lowered == "disagree":
         return 30.0
     return 58.0
+
+
+def _agreement_text(value: str | None) -> str:
+    lowered = (value or "").lower()
+    if lowered == "agree":
+        return "AI 与量化同向"
+    if lowered == "partial":
+        return "AI 与量化部分一致"
+    if lowered == "disagree":
+        return "AI 与量化存在分歧"
+    return "暂无 AI 一致性判断"
+
+
+def _freshness_text(value: str) -> str:
+    lowered = (value or "").lower()
+    if lowered == "fresh":
+        return "新鲜"
+    if lowered == "lagging":
+        return "一般"
+    if lowered == "stale":
+        return "过期"
+    return "未知"
 
 
 def _risk_flag_count(risk_flags: list[str]) -> int:
@@ -126,6 +149,7 @@ def build_prediction_scorecard(
     risk_flags = risk_flags or []
     agreement = str(ai_payload.get("agreement_with_model", "")) if ai_payload else None
     ai_prob = float(ai_payload.get("adjusted_up_probability", up_probability)) if ai_payload else up_probability
+    agreement_text = _agreement_text(agreement)
 
     quant_prob_score = _clamp(up_probability * 100.0, 0.0, 100.0)
     ai_prob_score = _clamp(ai_prob * 100.0, 0.0, 100.0)
@@ -221,15 +245,82 @@ def build_prediction_scorecard(
             "partial": "，AI 与量化部分一致",
             "disagree": "，AI 与量化存在分歧",
         }.get((agreement or "").lower(), "")
-    summary = f"{action_label}，综合评分{total_score}。{market_phrase}，{risk_phrase}{ai_phrase}。"
+    summary = (
+        f"{action_label}，综合评分{total_score}。上涨概率 {up_probability * 100:.2f}%，"
+        f"预期涨跌幅 {expected_return_pct:.2f}%，{market_phrase}，{risk_phrase}{ai_phrase}。"
+    )
+
+    direction_summary = (
+        f"因为上涨概率 {up_probability * 100:.2f}%"
+        + (f"、AI 调整后概率 {ai_prob * 100:.2f}%" if ai_payload else "")
+        + f"、{agreement_text if ai_payload else '当前未接入 AI 加权'}，所以方向判断 {int(_clamp(direction_score, 0.0, 100.0))} 分。"
+    )
+    direction_details = [
+        f"量化上涨概率：{up_probability * 100:.2f}%",
+        *( [f"AI 调整后上涨概率：{ai_prob * 100:.2f}%"] if ai_payload else [] ),
+        f"一致性判断：{agreement_text}",
+    ]
+
+    upside_summary = (
+        f"因为预期涨跌幅 {expected_return_pct:.2f}% 且置信度 {confidence * 100:.2f}%，"
+        f"所以空间收益 {int(_clamp(upside_score, 0.0, 100.0))} 分。"
+    )
+    upside_details = [
+        f"预期涨跌幅：{expected_return_pct:.2f}%",
+        f"量化置信度：{confidence * 100:.2f}%",
+        f"评分区间基准：{expected_lower:.1f}% ~ {expected_upper:.1f}%",
+    ]
+
+    market_summary = (
+        f"因为市场环境分 {market_score:.2f}、风格偏好分 {style_score:.2f}，"
+        f"所以市场环境 {int(_clamp(market_component, 0.0, 100.0))} 分。"
+    )
+    market_details = [
+        f"市场环境分：{market_score:.2f}",
+        f"风格偏好分：{style_score:.2f}",
+        f"市场源状态：{'降级' if market_source_degraded else '正常'}",
+    ]
+
+    narrative_summary = (
+        f"因为舆情情绪 {sentiment_score:.2f}、公告事件 {event_score:.2f}、热度冲击 {volume_shock_score:.2f}，"
+        f"所以舆情事件 {int(_clamp(narrative_score, 0.0, 100.0))} 分。"
+    )
+    narrative_details = [
+        f"舆情情绪分：{sentiment_score:.2f}",
+        f"事件冲击分：{event_score:.2f}",
+        f"热度冲击分：{volume_shock_score:.2f}",
+    ]
+
+    risk_summary = (
+        f"因为20日波动率 {volatility_20d:.2f}%"
+        if volatility_20d is not None
+        else "因为当前缺少波动率数据"
+    ) + (
+        f"，风险标签 {len(risk_flags)} 个，所以风险控制 {int(_clamp(risk_control_score, 0.0, 100.0))} 分。"
+    )
+    risk_details = [
+        f"20日波动率：{f'{volatility_20d:.2f}%' if volatility_20d is not None else '暂无'}",
+        f"风险标签数量：{_risk_flag_count(risk_flags)}",
+        f"风险标签：{'、'.join(risk_flags[:3]) if risk_flags else '暂无'}",
+    ]
+
+    credibility_summary = (
+        f"因为量化置信度 {confidence * 100:.2f}% 、数据新鲜度 {_freshness_text(data_freshness)}，"
+        f"所以可信度 {int(_clamp(credibility_score, 0.0, 100.0))} 分。"
+    )
+    credibility_details = [
+        f"量化置信度：{confidence * 100:.2f}%",
+        f"数据新鲜度：{_freshness_text(data_freshness)}",
+        f"市场数据源：{'降级' if market_source_degraded else '正常'}",
+    ]
 
     components = [
-        ScoreComponentResult("direction", "方向判断", int(_clamp(direction_score, 0.0, 100.0)), "结合上涨概率与 AI 第二意见后的方向分。"),
-        ScoreComponentResult("upside", "空间收益", int(_clamp(upside_score, 0.0, 100.0)), "综合预期涨跌幅与置信度后的空间分。"),
-        ScoreComponentResult("market", "市场环境", int(_clamp(market_component, 0.0, 100.0)), "由市场环境分和风格偏好分共同构成。"),
-        ScoreComponentResult("narrative", "舆情事件", int(_clamp(narrative_score, 0.0, 100.0)), "由舆情、公告事件和热度冲击共同构成。"),
-        ScoreComponentResult("risk_control", "风险控制", int(_clamp(risk_control_score, 0.0, 100.0)), "波动越低、负面风险标签越少，得分越高。"),
-        ScoreComponentResult("credibility", "可信度", int(_clamp(credibility_score, 0.0, 100.0)), "由预测置信度、数据新鲜度和数据源健康共同决定。"),
+        ScoreComponentResult("direction", "方向判断", int(_clamp(direction_score, 0.0, 100.0)), direction_summary, direction_details),
+        ScoreComponentResult("upside", "空间收益", int(_clamp(upside_score, 0.0, 100.0)), upside_summary, upside_details),
+        ScoreComponentResult("market", "市场环境", int(_clamp(market_component, 0.0, 100.0)), market_summary, market_details),
+        ScoreComponentResult("narrative", "舆情事件", int(_clamp(narrative_score, 0.0, 100.0)), narrative_summary, narrative_details),
+        ScoreComponentResult("risk_control", "风险控制", int(_clamp(risk_control_score, 0.0, 100.0)), risk_summary, risk_details),
+        ScoreComponentResult("credibility", "可信度", int(_clamp(credibility_score, 0.0, 100.0)), credibility_summary, credibility_details),
     ]
     return ScoreCardResult(
         horizon=horizon,

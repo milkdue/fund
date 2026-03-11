@@ -30,6 +30,27 @@ class FundRepositoryImpl @Inject constructor(
     private val watchlistDao: WatchlistDao,
 ) : FundRepository {
 
+    private fun mapScoreCard(dto: com.leaf.fundpredictor.data.remote.ScoreCardDto?): ScoreCard? {
+        if (dto == null) return null
+        return ScoreCard(
+            horizon = dto.horizon,
+            totalScore = dto.totalScore,
+            riskScore = dto.riskScore,
+            actionLabel = dto.actionLabel,
+            signalBias = dto.signalBias,
+            summary = dto.summary,
+            components = dto.components.map {
+                ScoreComponent(
+                    key = it.key,
+                    label = it.label,
+                    score = it.score,
+                    summary = it.summary,
+                    detailLines = it.detailLines,
+                )
+            },
+        )
+    }
+
     override suspend fun searchFunds(query: String): List<Fund> {
         return api.searchFunds(query).map { Fund(it.code, it.name, it.category) }
     }
@@ -57,21 +78,14 @@ class FundRepositoryImpl @Inject constructor(
             dto.modelVersion,
             dto.dataSource,
             dto.snapshotId,
-            ScoreCard(
-                horizon = scorecardDto?.horizon ?: dto.horizon,
-                totalScore = scorecardDto?.totalScore ?: ((dto.upProbability * 100).toInt()),
-                riskScore = scorecardDto?.riskScore ?: (dto.confidence * 100).toInt(),
-                actionLabel = scorecardDto?.actionLabel ?: "观察",
-                signalBias = scorecardDto?.signalBias ?: "震荡",
-                summary = scorecardDto?.summary ?: "当前后端尚未返回评分卡，先展示基础量化结果。",
-                components = scorecardDto?.components?.map {
-                    ScoreComponent(
-                        key = it.key,
-                        label = it.label,
-                        score = it.score,
-                        summary = it.summary,
-                    )
-                } ?: emptyList(),
+            mapScoreCard(scorecardDto) ?: ScoreCard(
+                horizon = dto.horizon,
+                totalScore = (dto.upProbability * 100).toInt(),
+                riskScore = (dto.confidence * 100).toInt(),
+                actionLabel = "观察",
+                signalBias = "震荡",
+                summary = "当前后端尚未返回评分卡，先展示基础量化结果。",
+                components = emptyList(),
             ),
         )
     }
@@ -169,6 +183,8 @@ class FundRepositoryImpl @Inject constructor(
                 riskScore = it.riskScore,
                 actionLabel = it.actionLabel,
                 scoreSummary = it.scoreSummary,
+                shortScorecard = mapScoreCard(it.shortScorecard),
+                midScorecard = mapScoreCard(it.midScorecard),
                 dataFreshness = it.dataFreshness,
                 riskLevel = it.riskLevel,
                 signal = it.signal,

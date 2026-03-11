@@ -34,6 +34,7 @@ data class ScoreComponent(
     val label: String,
     val score: Int,
     val summary: String,
+    val detailLines: List<String>,
 )
 
 data class ScoreCard(
@@ -121,6 +122,8 @@ data class WatchlistInsight(
     val riskScore: Int?,
     val actionLabel: String,
     val scoreSummary: String,
+    val shortScorecard: ScoreCard?,
+    val midScorecard: ScoreCard?,
     val dataFreshness: String,
     val riskLevel: String,
     val signal: String,

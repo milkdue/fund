@@ -228,6 +228,7 @@ def _to_scorecard_response(scorecard) -> ScoreCardResponse:
                 label=item.label,
                 score=item.score,
                 summary=item.summary,
+                detail_lines=item.detail_lines,
             )
             for item in scorecard.components
         ],
@@ -750,6 +751,8 @@ def watchlist_insights_get(
                 risk_score=risk_source_score,
                 action_label=action_label,
                 score_summary=score_summary,
+                short_scorecard=short_scorecard,
+                mid_scorecard=mid_scorecard,
                 data_freshness=data_freshness,
                 risk_level=risk_level,
                 signal=signal,
