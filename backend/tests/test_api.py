@@ -18,6 +18,8 @@ def test_end_to_end_read_flow(client):
     assert pred.status_code == 200
     assert 0 <= pred.json()["up_probability"] <= 1
     assert "model_version" in pred.json()
+    assert "scorecard" in pred.json()
+    assert "total_score" in pred.json()["scorecard"]
 
     explain = client.get(f"/v1/funds/{code}/explain", params={"horizon": "short"})
     assert explain.status_code == 200
@@ -40,6 +42,11 @@ def test_watchlist_flow(client):
     get_rows = client.get("/v1/user/watchlist", headers=headers)
     assert get_rows.status_code == 200
     assert get_rows.json()[0]["fund_code"] == "110022"
+
+    insights = client.get("/v1/user/watchlist/insights", headers=headers)
+    assert insights.status_code == 200
+    assert insights.json()["items"][0]["action_label"]
+    assert "score_summary" in insights.json()["items"][0]
 
     events = client.get("/v1/user/alerts/events", headers=headers)
     assert events.status_code == 200

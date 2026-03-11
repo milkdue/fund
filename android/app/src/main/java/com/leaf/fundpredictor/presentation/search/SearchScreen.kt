@@ -14,6 +14,8 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.NotificationsActive
+import androidx.compose.material.icons.rounded.NotificationsNone
 import androidx.compose.material.icons.rounded.QueryStats
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
@@ -132,6 +134,7 @@ fun SearchScreen(
                         MotionReveal(delayMs = 80 + (index.coerceAtMost(8) * 25)) {
                             FundListItem(
                                 fund = fund,
+                                hasAlert = state.alertFundCodes.contains(fund.code),
                                 onClick = { onOpenDetail(fund.code) },
                             )
                         }
@@ -198,6 +201,7 @@ private fun QuickChip(text: String, onClick: () -> Unit) {
 @Composable
 private fun FundListItem(
     fund: Fund,
+    hasAlert: Boolean,
     onClick: () -> Unit,
 ) {
     Card(
@@ -228,16 +232,20 @@ private fun FundListItem(
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 Text(fund.name, style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "代码 ${fund.code}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(
-                        "代码 ${fund.code}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    AssistChip(
+                        onClick = {},
+                        label = { Text(fund.category, maxLines = 1) },
                     )
-                    AssistChip(onClick = {}, label = { Text(fund.category) })
+                    AlertStateChip(hasAlert = hasAlert)
                 }
             }
             Icon(
@@ -247,4 +255,26 @@ private fun FundListItem(
             )
         }
     }
+}
+
+@Composable
+private fun AlertStateChip(hasAlert: Boolean) {
+    val bg = if (hasAlert) Color(0xFFE6F7F1) else Color(0xFFF1F3F6)
+    val fg = if (hasAlert) Color(0xFF126A57) else Color(0xFF68707D)
+    AssistChip(
+        onClick = {},
+        label = { Text(if (hasAlert) "已提醒" else "未提醒", maxLines = 1) },
+        leadingIcon = {
+            Icon(
+                imageVector = if (hasAlert) Icons.Rounded.NotificationsActive else Icons.Rounded.NotificationsNone,
+                contentDescription = null,
+                tint = fg,
+            )
+        },
+        colors = AssistChipDefaults.assistChipColors(
+            containerColor = bg,
+            labelColor = fg,
+            leadingIconContentColor = fg,
+        ),
+    )
 }

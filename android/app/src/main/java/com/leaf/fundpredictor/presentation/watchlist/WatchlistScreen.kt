@@ -1,6 +1,7 @@
 package com.leaf.fundpredictor.presentation.watchlist
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,6 +14,8 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.TrendingUp
+import androidx.compose.material.icons.rounded.NotificationsActive
+import androidx.compose.material.icons.rounded.NotificationsNone
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -40,7 +43,11 @@ import com.leaf.fundpredictor.presentation.components.MotionReveal
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun WatchlistScreen(viewModel: WatchlistViewModel, onBack: () -> Unit) {
+fun WatchlistScreen(
+    viewModel: WatchlistViewModel,
+    onBack: () -> Unit,
+    onOpenDetail: (String) -> Unit,
+) {
     val state by viewModel.uiState.collectAsState()
 
     LaunchedEffect(Unit) { viewModel.load() }
@@ -110,13 +117,21 @@ fun WatchlistScreen(viewModel: WatchlistViewModel, onBack: () -> Unit) {
                     if (state.insights.isNotEmpty()) {
                         itemsIndexed(state.insights, key = { _, item -> item.fundCode }) { index, item ->
                             MotionReveal(delayMs = 140 + (index.coerceAtMost(8) * 35)) {
-                                WatchlistInsightCard(item = item)
+                                WatchlistInsightCard(
+                                    item = item,
+                                    hasAlert = state.alertFundCodes.contains(item.fundCode),
+                                    onClick = { onOpenDetail(item.fundCode) },
+                                )
                             }
                         }
                     } else {
                         itemsIndexed(state.items, key = { _, item -> item.fundCode }) { index, item ->
                             MotionReveal(delayMs = 140 + (index.coerceAtMost(8) * 35)) {
-                                WatchlistItemCard(item = item)
+                                WatchlistItemCard(
+                                    item = item,
+                                    hasAlert = state.alertFundCodes.contains(item.fundCode),
+                                    onClick = { onOpenDetail(item.fundCode) },
+                                )
                             }
                         }
                     }
@@ -156,9 +171,15 @@ private fun OverviewCard(size: Int) {
 }
 
 @Composable
-private fun WatchlistInsightCard(item: WatchlistInsight) {
+private fun WatchlistInsightCard(
+    item: WatchlistInsight,
+    hasAlert: Boolean,
+    onClick: () -> Unit,
+) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
     ) {
@@ -175,12 +196,39 @@ private fun WatchlistInsightCard(item: WatchlistInsight) {
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     Text(item.fundCode, style = MaterialTheme.typography.titleMedium)
-                    Text("信号: ${item.signal}", style = MaterialTheme.typography.bodySmall, color = signalColor(item.signal))
+                    Text(
+                        "信号: ${item.signal} · ${item.actionLabel}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = signalColor(item.signal),
+                    )
                 }
-                Text(
-                    "风险: ${riskLevelText(item.riskLevel)}",
-                    color = riskLevelColor(item.riskLevel),
-                    style = MaterialTheme.typography.bodySmall,
+                Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    AlertStatusTag(hasAlert = hasAlert)
+                    Text(
+                        "风险: ${riskLevelText(item.riskLevel)}${item.riskScore?.let { " · ${it}分" } ?: ""}",
+                        color = riskLevelColor(item.riskLevel),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                InsightPill(
+                    modifier = Modifier.weight(1f),
+                    label = "短期评分",
+                    value = scoreOrDash(item.shortScore),
+                    color = scoreColor(item.shortScore),
+                )
+                InsightPill(
+                    modifier = Modifier.weight(1f),
+                    label = "中期评分",
+                    value = scoreOrDash(item.midScore),
+                    color = scoreColor(item.midScore),
+                )
+                InsightPill(
+                    modifier = Modifier.weight(1f),
+                    label = "行动标签",
+                    value = item.actionLabel,
+                    color = actionLabelColor(item.actionLabel),
                 )
             }
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -195,6 +243,13 @@ private fun WatchlistInsightCard(item: WatchlistInsight) {
                     label = "中期概率",
                     value = percentOrDash(item.midUpProbability),
                     color = percentColor(item.midUpProbability),
+                )
+            }
+            if (item.scoreSummary.isNotBlank()) {
+                Text(
+                    item.scoreSummary,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             Text(
@@ -229,9 +284,15 @@ private fun InsightPill(
 }
 
 @Composable
-private fun WatchlistItemCard(item: WatchlistItem) {
+private fun WatchlistItemCard(
+    item: WatchlistItem,
+    hasAlert: Boolean,
+    onClick: () -> Unit,
+) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
     ) {
@@ -245,14 +306,43 @@ private fun WatchlistItemCard(item: WatchlistItem) {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(item.fundCode, style = MaterialTheme.typography.titleMedium)
                 Text("已加入自选池", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
+                AlertStatusTag(hasAlert = hasAlert)
             }
             Icon(Icons.Rounded.Star, contentDescription = "watched", tint = Color(0xFFE9B300))
         }
     }
 }
 
+@Composable
+private fun AlertStatusTag(hasAlert: Boolean) {
+    val color = if (hasAlert) Color(0xFF126A57) else Color(0xFF68707D)
+    val bg = if (hasAlert) Color(0xFFE6F7F1) else Color(0xFFF1F3F6)
+    Row(
+        modifier = Modifier
+            .background(bg, shape = MaterialTheme.shapes.small)
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Icon(
+            imageVector = if (hasAlert) Icons.Rounded.NotificationsActive else Icons.Rounded.NotificationsNone,
+            contentDescription = null,
+            tint = color,
+        )
+        Text(
+            text = if (hasAlert) "已设置提醒" else "未设置提醒",
+            style = MaterialTheme.typography.bodySmall,
+            color = color,
+        )
+    }
+}
+
 private fun percentOrDash(value: Double?): String {
     return value?.let { "${(it * 100).toInt()}%" } ?: "--"
+}
+
+private fun scoreOrDash(value: Int?): String {
+    return value?.toString() ?: "--"
 }
 
 private fun percentColor(value: Double?): Color {
@@ -261,6 +351,26 @@ private fun percentColor(value: Double?): Color {
         value >= 0.6 -> Color(0xFF0B8A43)
         value <= 0.45 -> Color(0xFFC62828)
         else -> Color(0xFF8A6A00)
+    }
+}
+
+private fun scoreColor(value: Int?): Color {
+    if (value == null) return Color(0xFF70757F)
+    return when {
+        value >= 75 -> Color(0xFF0B8A43)
+        value >= 60 -> Color(0xFF0C5B9F)
+        value >= 45 -> Color(0xFFB26A00)
+        else -> Color(0xFFC62828)
+    }
+}
+
+private fun actionLabelColor(value: String): Color {
+    return when (value) {
+        "强关注" -> Color(0xFF0B8A43)
+        "关注" -> Color(0xFF126A57)
+        "观察" -> Color(0xFFB26A00)
+        "回避" -> Color(0xFFC62828)
+        else -> Color(0xFF70757F)
     }
 }
 

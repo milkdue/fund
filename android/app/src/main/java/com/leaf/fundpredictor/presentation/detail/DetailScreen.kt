@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.animation.core.animateFloatAsState
@@ -23,6 +24,7 @@ import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
@@ -31,6 +33,8 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -38,6 +42,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.geometry.Offset
@@ -50,6 +55,7 @@ import com.leaf.fundpredictor.domain.model.KlineCandle
 import com.leaf.fundpredictor.domain.model.Prediction
 import com.leaf.fundpredictor.domain.model.PredictionChange
 import com.leaf.fundpredictor.domain.model.Quote
+import com.leaf.fundpredictor.presentation.components.LabelWithTooltip
 import com.leaf.fundpredictor.presentation.components.ListSkeleton
 import com.leaf.fundpredictor.presentation.components.MotionReveal
 import java.time.LocalDateTime
@@ -62,11 +68,23 @@ fun DetailScreen(code: String, viewModel: DetailViewModel, onBack: () -> Unit) {
     val state by viewModel.uiState.collectAsState()
     val shortAi = state.shortAi
     val midAi = state.midAi
+    val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(code) { viewModel.load(code) }
+    LaunchedEffect(state.notice) {
+        val message = state.notice ?: return@LaunchedEffect
+        snackbarHostState.showSnackbar(message)
+        viewModel.consumeNotice()
+    }
+    LaunchedEffect(state.error) {
+        val message = state.error ?: return@LaunchedEffect
+        snackbarHostState.showSnackbar(message)
+        viewModel.consumeError()
+    }
 
     Scaffold(
         containerColor = Color.Transparent,
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = {
@@ -108,21 +126,53 @@ fun DetailScreen(code: String, viewModel: DetailViewModel, onBack: () -> Unit) {
                     )
                 }
 
-                MotionReveal(delayMs = 110) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                        FilledTonalButton(
-                            modifier = Modifier.weight(1f),
-                            onClick = { viewModel.addWatchlist(code) },
-                        ) {
-                            Icon(Icons.Rounded.Star, contentDescription = "watch")
-                            Text("加入自选", modifier = Modifier.padding(start = 6.dp))
-                        }
-                        OutlinedButton(
-                            modifier = Modifier.weight(1f),
-                            onClick = { viewModel.setDefaultAlert(code) },
-                        ) {
-                            Icon(Icons.Rounded.AddAlert, contentDescription = "alert")
-                            Text("添加提醒", modifier = Modifier.padding(start = 6.dp))
+                if (!state.loading) {
+                    MotionReveal(delayMs = 110) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                            FilledTonalButton(
+                                modifier = Modifier.weight(1f),
+                                enabled = !state.isAddingWatchlist && !state.isSettingAlert && !state.isWatchlisted,
+                                onClick = { viewModel.addWatchlist(code) },
+                            ) {
+                                if (state.isAddingWatchlist) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier
+                                            .size(16.dp)
+                                            .padding(end = 6.dp),
+                                        strokeWidth = 2.dp,
+                                        color = MaterialTheme.colorScheme.primary,
+                                    )
+                                    Text("添加中...")
+                                } else if (state.isWatchlisted) {
+                                    Icon(Icons.Rounded.Star, contentDescription = "watch")
+                                    Text("已加入自选", modifier = Modifier.padding(start = 6.dp))
+                                } else {
+                                    Icon(Icons.Rounded.Star, contentDescription = "watch")
+                                    Text("加入自选", modifier = Modifier.padding(start = 6.dp))
+                                }
+                            }
+                            OutlinedButton(
+                                modifier = Modifier.weight(1f),
+                                enabled = !state.isAddingWatchlist && !state.isSettingAlert && !state.hasAlertConfigured,
+                                onClick = { viewModel.setDefaultAlert(code) },
+                            ) {
+                                if (state.isSettingAlert) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier
+                                            .size(16.dp)
+                                            .padding(end = 6.dp),
+                                        strokeWidth = 2.dp,
+                                        color = MaterialTheme.colorScheme.primary,
+                                    )
+                                    Text("设置中...")
+                                } else if (state.hasAlertConfigured) {
+                                    Icon(Icons.Rounded.NotificationsActive, contentDescription = "alert")
+                                    Text("已添加提醒", modifier = Modifier.padding(start = 6.dp))
+                                } else {
+                                    Icon(Icons.Rounded.AddAlert, contentDescription = "alert")
+                                    Text("添加提醒", modifier = Modifier.padding(start = 6.dp))
+                                }
+                            }
                         }
                     }
                 }
@@ -197,7 +247,7 @@ fun DetailScreen(code: String, viewModel: DetailViewModel, onBack: () -> Unit) {
                                 Text("核心因子贡献")
                                 it.topFactors.forEach { factor ->
                                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                        Text(factor.name)
+                                        FactorLabel(name = factor.name)
                                         Text(
                                             text = String.format("%.2f", factor.contribution),
                                             color = numberColor(factor.contribution),
@@ -226,8 +276,6 @@ fun DetailScreen(code: String, viewModel: DetailViewModel, onBack: () -> Unit) {
                     }
                 }
 
-                state.notice?.let { Text(it, color = Color(0xFF0B8A43)) }
-                state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             }
         }
     }
@@ -254,12 +302,16 @@ private fun OverviewSignalCard(
                 Text("综合信号总览", style = MaterialTheme.typography.titleMedium, color = Color.White)
             }
             Text(
-                shortPred?.let { "短期上涨概率 ${(it.upProbability * 100).toInt()}%，预期 ${signedPercent(it.expectedReturnPct)}" }
+                shortPred?.let {
+                    "短期 ${it.scorecard.actionLabel} · 综合 ${it.scorecard.totalScore} · 预期 ${signedPercent(it.expectedReturnPct)}"
+                }
                     ?: "短期信号生成中",
                 color = Color.White.copy(alpha = 0.92f),
             )
             Text(
-                midPred?.let { "中期上涨概率 ${(it.upProbability * 100).toInt()}%，预期 ${signedPercent(it.expectedReturnPct)}" }
+                midPred?.let {
+                    "中期 ${it.scorecard.actionLabel} · 综合 ${it.scorecard.totalScore} · 预期 ${signedPercent(it.expectedReturnPct)}"
+                }
                     ?: "中期信号生成中",
                 color = Color.White.copy(alpha = 0.9f),
             )
@@ -389,7 +441,7 @@ private fun PredictionCard(title: String, prediction: Prediction) {
             )
             Text("模型: ${prediction.modelVersion} · 来源: ${prediction.dataSource}")
             prediction.snapshotId?.let { snapshot ->
-                Text("快照ID: $snapshot", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("快照编号: $snapshot", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Text("上涨概率: ${(prediction.upProbability * 100).toInt()}%")
             LinearProgressIndicator(
@@ -404,6 +456,68 @@ private fun PredictionCard(title: String, prediction: Prediction) {
                 modifier = Modifier.fillMaxWidth(),
                 color = Color(0xFF126A57),
             )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                ScorePill(
+                    modifier = Modifier.weight(1f),
+                    label = "综合评分",
+                    value = "${prediction.scorecard.totalScore}",
+                    color = actionColor(prediction.scorecard.actionLabel),
+                )
+                ScorePill(
+                    modifier = Modifier.weight(1f),
+                    label = "风险分",
+                    value = "${prediction.scorecard.riskScore}",
+                    color = riskScoreColor(prediction.scorecard.riskScore),
+                )
+                ScorePill(
+                    modifier = Modifier.weight(1f),
+                    label = "行动标签",
+                    value = prediction.scorecard.actionLabel,
+                    color = actionColor(prediction.scorecard.actionLabel),
+                )
+            }
+            Text(
+                prediction.scorecard.summary,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (prediction.scorecard.components.isNotEmpty()) {
+                Text("评分拆解", style = MaterialTheme.typography.titleSmall)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    prediction.scorecard.components.take(3).forEach { component ->
+                        ScorePill(
+                            modifier = Modifier.weight(1f),
+                            label = component.label,
+                            value = "${component.score}",
+                            color = componentColor(component.score),
+                        )
+                    }
+                }
+                prediction.scorecard.components.drop(3).take(3).takeIf { it.isNotEmpty() }?.let { tail ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        tail.forEach { component ->
+                            ScorePill(
+                                modifier = Modifier.weight(1f),
+                                label = component.label,
+                                value = "${component.score}",
+                                color = componentColor(component.score),
+                            )
+                        }
+                        repeat((3 - tail.size).coerceAtLeast(0)) {
+                            Box(modifier = Modifier.weight(1f))
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -442,7 +556,7 @@ private fun PredictionChangeCard(change: PredictionChange) {
                     label = "置信变化",
                     value = signedDelta(change.confidenceDelta * 100),
                     valueColor = numberColor(change.confidenceDelta),
-                    suffix = "pt",
+                    suffix = "百分点",
                 )
             }
 
@@ -453,7 +567,10 @@ private fun PredictionChangeCard(change: PredictionChange) {
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                     ) {
-                        Text(factor.name, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        FactorLabel(
+                            name = factor.name,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                         Text(
                             "${signedDelta(factor.delta)}",
                             color = numberColor(factor.delta),
@@ -491,6 +608,30 @@ private fun MetricDeltaTile(
 }
 
 @Composable
+private fun ScorePill(
+    modifier: Modifier = Modifier,
+    label: String,
+    value: String,
+    color: Color,
+) {
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(containerColor = color.copy(alpha = 0.12f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(value, style = MaterialTheme.typography.titleSmall, color = color)
+        }
+    }
+}
+
+@Composable
 private fun AiJudgementCard(title: String, judgement: AiJudgement) {
     val adjustedProgress by animateFloatAsState(
         targetValue = judgement.adjustedUpProbability.toFloat(),
@@ -504,7 +645,10 @@ private fun AiJudgementCard(title: String, judgement: AiJudgement) {
         elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
     ) {
         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(title, style = MaterialTheme.typography.titleMedium)
+            LabelWithTooltip(
+                label = title,
+                tooltip = "AI 指人工智能。这里是结合量化结果、市场环境和文本信息后的辅助判断，不是保证收益的结论。",
+            )
             Text("数据时间: ${formatAsOf(judgement.asOf)}")
             Text(
                 "新鲜度: ${freshnessText(judgement.dataFreshness)}",
@@ -544,7 +688,10 @@ private fun AiUnavailableCard(title: String) {
         colors = CardDefaults.cardColors(containerColor = Color(0xFFF1F3F6))
     ) {
         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(title, style = MaterialTheme.typography.titleMedium)
+            LabelWithTooltip(
+                label = title,
+                tooltip = "AI 指人工智能。当前没有可用的 AI 辅助判断，所以先展示量化预测结果。",
+            )
             Text("AI第二意见暂不可用，当前展示量化预测结果。", color = Color(0xFF666666))
         }
     }
@@ -562,8 +709,21 @@ private fun KlineCard(candles: List<KlineCandle>) {
         elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
     ) {
         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("净值趋势图（近60日）", style = MaterialTheme.typography.titleMedium)
-            Text("由净值序列估算生成，仅用于趋势参考（非真实OHLC K线）")
+            LabelWithTooltip(
+                label = "净值趋势图（近60日）",
+                tooltip = "K线是把一段时间内的开盘、最高、最低、收盘画成柱状图，用来看趋势和波动。",
+            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text("由净值序列估算生成，仅用于趋势参考（非真实 OHLC K 线）")
+                LabelWithTooltip(
+                    label = "OHLC",
+                    tooltip = "OHLC 分别是开盘价、最高价、最低价、收盘价。",
+                    labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             Canvas(modifier = Modifier.fillMaxWidth().height(120.dp)) {
                 val min = candles.minOfOrNull { it.low } ?: 0.0
                 val max = candles.maxOfOrNull { it.high } ?: 1.0
@@ -671,6 +831,100 @@ private fun agreementText(value: String): String {
         "partial" -> "部分一致"
         "disagree" -> "不一致"
         else -> "未知"
+    }
+}
+
+private fun actionColor(label: String): Color {
+    return when (label) {
+        "强关注" -> Color(0xFF0B8A43)
+        "关注" -> Color(0xFF126A57)
+        "观察" -> Color(0xFFB26A00)
+        "回避" -> Color(0xFFC62828)
+        else -> Color(0xFF596072)
+    }
+}
+
+private fun riskScoreColor(score: Int): Color {
+    return when {
+        score >= 70 -> Color(0xFF0B8A43)
+        score >= 45 -> Color(0xFFB26A00)
+        else -> Color(0xFFC62828)
+    }
+}
+
+private fun componentColor(score: Int): Color {
+    return when {
+        score >= 75 -> Color(0xFF0B8A43)
+        score >= 55 -> Color(0xFF0C5B9F)
+        score >= 40 -> Color(0xFFB26A00)
+        else -> Color(0xFFC62828)
+    }
+}
+
+@Composable
+private fun FactorLabel(
+    name: String,
+    color: Color = MaterialTheme.colorScheme.onSurface,
+) {
+    val meaning = factorMeaning(name)
+    LabelWithTooltip(
+        label = meaning.displayName,
+        tooltip = meaning.tooltip,
+        labelColor = color,
+    )
+}
+
+private data class FactorMeaning(
+    val displayName: String,
+    val tooltip: String,
+)
+
+private fun factorMeaning(raw: String): FactorMeaning {
+    return when (raw.lowercase()) {
+        "style_score" -> FactorMeaning(
+            displayName = "风格偏好分",
+            tooltip = "style_score：衡量当前市场更偏成长还是偏价值，以及这种风格是否更有利于这只基金。",
+        )
+
+        "volatility_20d" -> FactorMeaning(
+            displayName = "20日波动率",
+            tooltip = "volatility_20d：统计近20个交易日波动有多大。越高代表价格越不稳，风险通常越高。",
+        )
+
+        "market_score" -> FactorMeaning(
+            displayName = "市场环境分",
+            tooltip = "market_score：综合大盘涨跌、动量和波动后的市场风险偏好分数。分数越高，整体环境越偏多。",
+        )
+
+        "nav" -> FactorMeaning(
+            displayName = "基金净值",
+            tooltip = "nav：基金当前单位净值水平。净值本身及其变化会影响趋势判断。",
+        )
+
+        "daily_change_pct" -> FactorMeaning(
+            displayName = "当日涨跌幅",
+            tooltip = "daily_change_pct：最近一个交易日净值的涨跌百分比，用来衡量短期动量。",
+        )
+
+        "sentiment_score" -> FactorMeaning(
+            displayName = "舆情情绪分",
+            tooltip = "sentiment_score：根据公告、新闻和舆情文本得到的情绪强弱分，正值偏利好，负值偏利空。",
+        )
+
+        "event_score" -> FactorMeaning(
+            displayName = "事件冲击分",
+            tooltip = "event_score：重大公告或事件对趋势的短期影响强度，正值偏利好，负值偏利空。",
+        )
+
+        "volume_shock_score" -> FactorMeaning(
+            displayName = "热度冲击分",
+            tooltip = "volume_shock_score：新闻数量和关注度突然变化带来的热度影响，常反映情绪波动。",
+        )
+
+        else -> FactorMeaning(
+            displayName = raw,
+            tooltip = "$raw：这是模型内部使用的特征字段名称，当前暂无中文释义。",
+        )
     }
 }
 

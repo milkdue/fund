@@ -20,6 +20,10 @@ import kotlinx.coroutines.launch
 
 data class DetailUiState(
     val loading: Boolean = false,
+    val isAddingWatchlist: Boolean = false,
+    val isSettingAlert: Boolean = false,
+    val isWatchlisted: Boolean = false,
+    val hasAlertConfigured: Boolean = false,
     val quote: Quote? = null,
     val shortPred: Prediction? = null,
     val midPred: Prediction? = null,
@@ -51,7 +55,20 @@ class DetailViewModel @Inject constructor(
                 val kline = repository.getKline(code, days = 60)
                 val shortAi = runCatching { repository.getAiJudgement(code, "short") }.getOrNull()
                 val midAi = runCatching { repository.getAiJudgement(code, "mid") }.getOrNull()
+                val watchlistCodes = runCatching { repository.getWatchlist() }
+                    .getOrDefault(emptyList())
+                    .asSequence()
+                    .map { it.fundCode }
+                    .toSet()
+                val alertCodes = runCatching { repository.getAlertRules() }
+                    .getOrDefault(emptyList())
+                    .asSequence()
+                    .filter { it.enabled }
+                    .map { it.fundCode }
+                    .toSet()
                 DetailUiState(
+                    isWatchlisted = watchlistCodes.contains(code),
+                    hasAlertConfigured = alertCodes.contains(code),
                     quote = quote,
                     shortPred = shortPred,
                     midPred = midPred,
@@ -71,14 +88,27 @@ class DetailViewModel @Inject constructor(
     }
 
     fun addWatchlist(code: String) {
+        if (_uiState.value.isAddingWatchlist || _uiState.value.isWatchlisted) return
         viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(
+                isAddingWatchlist = true,
+                notice = null,
+                error = null,
+            )
             runCatching { repository.addWatchlist(code) }
                 .onSuccess {
-                    _uiState.value = _uiState.value.copy(notice = "已加入自选")
+                    _uiState.value = _uiState.value.copy(
+                        isAddingWatchlist = false,
+                        isWatchlisted = true,
+                        notice = "已加入自选",
+                    )
                 }
                 .onFailure { ex ->
                     Log.e("DetailViewModel", "add watchlist failed, code=$code, type=${ex::class.java.simpleName}, msg=${ex.message}", ex)
-                    _uiState.value = _uiState.value.copy(error = "加入自选失败")
+                    _uiState.value = _uiState.value.copy(
+                        isAddingWatchlist = false,
+                        error = "加入自选失败",
+                    )
                 }
         }
     }
@@ -97,15 +127,36 @@ class DetailViewModel @Inject constructor(
     }
 
     fun setDefaultAlert(code: String, horizon: String = "short") {
+        if (_uiState.value.isSettingAlert || _uiState.value.hasAlertConfigured) return
         viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(
+                isSettingAlert = true,
+                notice = null,
+                error = null,
+            )
             runCatching { repository.upsertDefaultAlert(code, horizon) }
                 .onSuccess {
-                    _uiState.value = _uiState.value.copy(notice = "已添加提醒阈值")
+                    _uiState.value = _uiState.value.copy(
+                        isSettingAlert = false,
+                        hasAlertConfigured = true,
+                        notice = "已添加提醒阈值",
+                    )
                 }
                 .onFailure { ex ->
                     Log.e("DetailViewModel", "alert upsert failed, code=$code, type=${ex::class.java.simpleName}, msg=${ex.message}", ex)
-                    _uiState.value = _uiState.value.copy(error = "提醒设置失败")
+                    _uiState.value = _uiState.value.copy(
+                        isSettingAlert = false,
+                        error = "提醒设置失败",
+                    )
                 }
         }
+    }
+
+    fun consumeNotice() {
+        _uiState.value = _uiState.value.copy(notice = null)
+    }
+
+    fun consumeError() {
+        _uiState.value = _uiState.value.copy(error = null)
     }
 }

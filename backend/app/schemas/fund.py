@@ -18,6 +18,23 @@ class QuoteResponse(BaseModel):
     volatility_20d: float
 
 
+class ScoreComponentResponse(BaseModel):
+    key: str
+    label: str
+    score: int = Field(ge=0, le=100)
+    summary: str
+
+
+class ScoreCardResponse(BaseModel):
+    horizon: str
+    total_score: int = Field(ge=0, le=100)
+    risk_score: int = Field(ge=0, le=100)
+    action_label: str
+    signal_bias: str
+    summary: str
+    components: list[ScoreComponentResponse] = Field(default_factory=list)
+
+
 class PredictResponse(BaseModel):
     code: str
     horizon: str
@@ -29,6 +46,7 @@ class PredictResponse(BaseModel):
     model_version: str = "unknown"
     data_source: str = "eastmoney"
     snapshot_id: str | None = None
+    scorecard: ScoreCardResponse
 
 
 class ExplainFactor(BaseModel):
@@ -287,6 +305,11 @@ class WatchlistInsightItem(BaseModel):
     short_confidence: float | None = Field(default=None, ge=0.0, le=1.0)
     mid_up_probability: float | None = Field(default=None, ge=0.0, le=1.0)
     mid_confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+    short_score: int | None = Field(default=None, ge=0, le=100)
+    mid_score: int | None = Field(default=None, ge=0, le=100)
+    risk_score: int | None = Field(default=None, ge=0, le=100)
+    action_label: str = "观察"
+    score_summary: str = ""
     data_freshness: str = "stale"
     risk_level: str
     signal: str

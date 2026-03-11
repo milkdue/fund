@@ -8,10 +8,13 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.TrendingUp
 import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material.icons.rounded.QueryStats
+import androidx.compose.material.icons.rounded.School
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -33,6 +36,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.leaf.fundpredictor.presentation.components.LabelWithTooltip
 import com.leaf.fundpredictor.domain.model.DataHealth
 import com.leaf.fundpredictor.presentation.components.MotionReveal
 
@@ -43,6 +47,7 @@ fun HomeScreen(
     onOpenSearch: () -> Unit,
     onOpenWatchlist: () -> Unit,
     onOpenAlerts: () -> Unit,
+    onOpenLearn: () -> Unit,
 ) {
     val state by viewModel.uiState.collectAsState()
 
@@ -79,6 +84,7 @@ fun HomeScreen(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
                     .padding(horizontal = 16.dp, vertical = 10.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
@@ -100,6 +106,7 @@ fun HomeScreen(
                         onOpenSearch = onOpenSearch,
                         onOpenWatchlist = onOpenWatchlist,
                         onOpenAlerts = onOpenAlerts,
+                        onOpenLearn = onOpenLearn,
                     )
                 }
 
@@ -126,6 +133,8 @@ fun HomeScreen(
                         Text("暂未获取到系统健康数据，请稍后刷新。", modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp))
                     }
                 }
+
+                Box(modifier = Modifier.padding(bottom = 16.dp))
             }
         }
     }
@@ -169,9 +178,10 @@ private fun StrategyBoardCard(
                 )
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.AutoMirrored.Rounded.TrendingUp, contentDescription = "trend", tint = Color.White)
-                    Text(
-                        "量化 + AI 双引擎辅助",
-                        color = Color.White,
+                    LabelWithTooltip(
+                        label = "量化 + AI 双引擎辅助",
+                        tooltip = "AI 指人工智能。这里用于辅助解释和第二意见，不代表自动交易或保证收益。",
+                        labelColor = Color.White,
                         modifier = Modifier.padding(start = 6.dp),
                     )
                 }
@@ -281,6 +291,7 @@ private fun HomeActionGrid(
     onOpenSearch: () -> Unit,
     onOpenWatchlist: () -> Unit,
     onOpenAlerts: () -> Unit,
+    onOpenLearn: () -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         FilledTonalButton(
@@ -308,6 +319,13 @@ private fun HomeActionGrid(
                 Icon(Icons.Rounded.NotificationsActive, contentDescription = "alerts")
                 Text("推送列表", modifier = Modifier.padding(start = 6.dp))
             }
+        }
+        OutlinedButton(
+            modifier = Modifier.fillMaxWidth(),
+            onClick = onOpenLearn,
+        ) {
+            Icon(Icons.Rounded.School, contentDescription = "learn")
+            Text("新手理论", modifier = Modifier.padding(start = 6.dp))
         }
     }
 }

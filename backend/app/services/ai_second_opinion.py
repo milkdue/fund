@@ -416,6 +416,24 @@ def _from_cache_row(row: AiJudgementCache) -> dict:
     }
 
 
+def peek_ai_second_opinion(db: Session, code: str, horizon: str, as_of: datetime | None = None) -> dict | None:
+    AiJudgementCache.__table__.create(bind=db.get_bind(), checkfirst=True)
+    cache_model = _cache_model_name()
+    stmt = select(AiJudgementCache).where(
+        AiJudgementCache.fund_code == code,
+        AiJudgementCache.horizon == horizon,
+        AiJudgementCache.model == cache_model,
+        AiJudgementCache.prompt_version == settings.gemini_prompt_version,
+    )
+    if as_of is not None:
+        stmt = stmt.where(AiJudgementCache.as_of == as_of)
+    stmt = stmt.order_by(AiJudgementCache.as_of.desc(), AiJudgementCache.updated_at.desc()).limit(1)
+    row = db.scalar(stmt)
+    if not row:
+        return None
+    return _from_cache_row(row)
+
+
 def get_ai_second_opinion(db: Session, code: str, horizon: str) -> dict:
     # Backward compatibility for existing DBs without schema migrations.
     AiJudgementCache.__table__.create(bind=db.get_bind(), checkfirst=True)

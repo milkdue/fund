@@ -23,6 +23,25 @@ data class QuoteDto(
 )
 
 @JsonClass(generateAdapter = true)
+data class ScoreComponentDto(
+    val key: String,
+    val label: String,
+    val score: Int,
+    val summary: String,
+)
+
+@JsonClass(generateAdapter = true)
+data class ScoreCardDto(
+    val horizon: String,
+    @Json(name = "total_score") val totalScore: Int,
+    @Json(name = "risk_score") val riskScore: Int,
+    @Json(name = "action_label") val actionLabel: String,
+    @Json(name = "signal_bias") val signalBias: String,
+    val summary: String,
+    val components: List<ScoreComponentDto>,
+)
+
+@JsonClass(generateAdapter = true)
 data class PredictionDto(
     val code: String,
     val horizon: String,
@@ -34,6 +53,7 @@ data class PredictionDto(
     @Json(name = "model_version") val modelVersion: String = "unknown",
     @Json(name = "data_source") val dataSource: String = "rule_based",
     @Json(name = "snapshot_id") val snapshotId: String? = null,
+    val scorecard: ScoreCardDto? = null,
 )
 
 @JsonClass(generateAdapter = true)
@@ -117,6 +137,11 @@ data class WatchlistInsightDto(
     @Json(name = "short_confidence") val shortConfidence: Double? = null,
     @Json(name = "mid_up_probability") val midUpProbability: Double? = null,
     @Json(name = "mid_confidence") val midConfidence: Double? = null,
+    @Json(name = "short_score") val shortScore: Int? = null,
+    @Json(name = "mid_score") val midScore: Int? = null,
+    @Json(name = "risk_score") val riskScore: Int? = null,
+    @Json(name = "action_label") val actionLabel: String = "观察",
+    @Json(name = "score_summary") val scoreSummary: String = "",
     @Json(name = "data_freshness") val dataFreshness: String,
     @Json(name = "risk_level") val riskLevel: String,
     val signal: String,
@@ -245,6 +270,11 @@ interface FundApi {
         @Body payload: AlertRuleRequest,
         @Header("X-User-Id") userId: String = "demo-user",
     ): AlertRuleDto
+
+    @GET("user/alerts")
+    suspend fun getAlertRules(
+        @Header("X-User-Id") userId: String = "demo-user",
+    ): List<AlertRuleDto>
 
     @GET("user/alerts/events")
     suspend fun getAlertEvents(

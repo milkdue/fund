@@ -26,6 +26,24 @@ data class Prediction(
     val modelVersion: String,
     val dataSource: String,
     val snapshotId: String?,
+    val scorecard: ScoreCard,
+)
+
+data class ScoreComponent(
+    val key: String,
+    val label: String,
+    val score: Int,
+    val summary: String,
+)
+
+data class ScoreCard(
+    val horizon: String,
+    val totalScore: Int,
+    val riskScore: Int,
+    val actionLabel: String,
+    val signalBias: String,
+    val summary: String,
+    val components: List<ScoreComponent>,
 )
 
 data class ExplainFactor(
@@ -98,6 +116,11 @@ data class WatchlistInsight(
     val shortConfidence: Double?,
     val midUpProbability: Double?,
     val midConfidence: Double?,
+    val shortScore: Int?,
+    val midScore: Int?,
+    val riskScore: Int?,
+    val actionLabel: String,
+    val scoreSummary: String,
     val dataFreshness: String,
     val riskLevel: String,
     val signal: String,
@@ -120,4 +143,12 @@ data class AlertEvent(
     val horizon: String,
     val message: String,
     val createdAt: String,
+)
+
+data class AlertRule(
+    val id: Long,
+    val userId: String,
+    val fundCode: String,
+    val horizon: String,
+    val enabled: Boolean,
 )

@@ -40,6 +40,8 @@ from app.schemas.fund import (
     PredictionChangeFactor,
     PredictionChangeResponse,
     QuoteResponse,
+    ScoreCardResponse,
+    ScoreComponentResponse,
     UserEventIn,
     UserEventResponse,
     WatchlistIn,
@@ -58,9 +60,10 @@ from app.services.model_health import get_model_health
 from app.services.market_sync import MarketSyncError, MarketSyncRateLimitError, refresh_fund_data
 from app.services.model_ab_service import ab_summary, list_latest_ab_results
 from app.services.news_sync import NewsSyncError, NewsSyncRateLimitError, refresh_news_signals_for_code
-from app.services.ai_second_opinion import AiSecondOpinionError, get_ai_second_opinion
+from app.services.ai_second_opinion import AiSecondOpinionError, get_ai_second_opinion, peek_ai_second_opinion
 from app.services.alert_push_service import push_bark_message
 from app.services.predictor import build_risk_flags, confidence_interval, explain_features
+from app.services.score_service import build_prediction_scorecard, risk_level_from_score
 from app.services.fund_search_source import FundSearchError, FundSearchRateLimitError, remote_search_funds
 from app.services.fund_data_source import FundDataError, fetch_kline_points
 from app.services.fund_sync import upsert_funds
@@ -210,6 +213,67 @@ def _watchlist_signal(*, short_up: float | None, mid_up: float | None) -> str:
         return "偏空"
     return "震荡"
 
+
+def _to_scorecard_response(scorecard) -> ScoreCardResponse:
+    return ScoreCardResponse(
+        horizon=scorecard.horizon,
+        total_score=scorecard.total_score,
+        risk_score=scorecard.risk_score,
+        action_label=scorecard.action_label,
+        signal_bias=scorecard.signal_bias,
+        summary=scorecard.summary,
+        components=[
+            ScoreComponentResponse(
+                key=item.key,
+                label=item.label,
+                score=item.score,
+                summary=item.summary,
+            )
+            for item in scorecard.components
+        ],
+    )
+
+
+def _build_scorecard_response(
+    *,
+    db: Session,
+    code: str,
+    horizon: str,
+    pred,
+    quote,
+    news_signal,
+    market_ctx,
+):
+    sentiment_score = news_signal.sentiment_score if news_signal else 0.0
+    event_score = news_signal.event_score if news_signal else 0.0
+    volume_shock_score = news_signal.volume_shock if news_signal else 0.0
+    risk_flags = build_risk_flags(
+        volatility_20d=quote.volatility_20d if quote else None,
+        confidence=pred.confidence,
+        sentiment_score=sentiment_score,
+        event_score=event_score,
+        volume_shock_score=volume_shock_score,
+        market_source_degraded=market_ctx.source_degraded,
+    )
+    ai_payload = peek_ai_second_opinion(db, code, horizon, pred.as_of)
+    scorecard = build_prediction_scorecard(
+        horizon=horizon,
+        up_probability=float(pred.up_probability),
+        expected_return_pct=float(pred.expected_return_pct),
+        confidence=float(pred.confidence),
+        data_freshness=_freshness(pred.as_of),
+        volatility_20d=quote.volatility_20d if quote else None,
+        market_score=market_ctx.market_score,
+        style_score=market_ctx.style_score,
+        sentiment_score=sentiment_score,
+        event_score=event_score,
+        volume_shock_score=volume_shock_score,
+        risk_flags=risk_flags,
+        market_source_degraded=market_ctx.source_degraded,
+        ai_payload=ai_payload,
+    )
+    return _to_scorecard_response(scorecard)
+
 @router.get("/funds/search", response_model=list[FundItem])
 def funds_search(q: str = Query(default=""), db: Session = Depends(get_db)):
     funds = search_funds(db, q)
@@ -283,6 +347,9 @@ def fund_predict(code: str, horizon: str = Query(pattern="^(short|mid)$"), db: S
         raise HTTPException(status_code=404, detail="prediction not found")
     snapshot = latest_snapshot(db, fund_code=code, horizon=horizon)
     fallback_model = settings.model_short_version if horizon == "short" else settings.model_mid_version
+    quote = latest_quote(db, code)
+    news_signal = latest_news_signal(db, code)
+    market_ctx = get_or_refresh_market_context(db)
     return PredictResponse(
         code=pred.fund_code,
         horizon=pred.horizon,
@@ -294,6 +361,15 @@ def fund_predict(code: str, horizon: str = Query(pattern="^(short|mid)$"), db: S
         model_version=snapshot.model_version if snapshot else fallback_model,
         data_source=snapshot.data_source if snapshot else "rule_based",
         snapshot_id=snapshot.snapshot_id if snapshot else None,
+        scorecard=_build_scorecard_response(
+            db=db,
+            code=code,
+            horizon=horizon,
+            pred=pred,
+            quote=quote,
+            news_signal=news_signal,
+            market_ctx=market_ctx,
+        ),
     )
 
 
@@ -616,10 +692,12 @@ def watchlist_insights_get(
 ):
     rows = get_watchlist(db, user_id)
     items: list[WatchlistInsightItem] = []
+    market_ctx = get_or_refresh_market_context(db)
     for row in rows:
         short_pred = latest_prediction(db, row.fund_code, "short")
         mid_pred = latest_prediction(db, row.fund_code, "mid")
         quote = latest_quote(db, row.fund_code)
+        news_signal = latest_news_signal(db, row.fund_code)
         latest_as_of = max(
             [ts for ts in [short_pred.as_of if short_pred else None, mid_pred.as_of if mid_pred else None] if ts],
             default=None,
@@ -629,11 +707,37 @@ def watchlist_insights_get(
         short_conf = float(short_pred.confidence) if short_pred else None
         mid_up = float(mid_pred.up_probability) if mid_pred else None
         mid_conf = float(mid_pred.confidence) if mid_pred else None
-        risk_level = _watchlist_risk_level(
-            confidence=short_conf if short_conf is not None else mid_conf,
-            volatility_20d=quote.volatility_20d if quote else None,
+        short_scorecard = (
+            _build_scorecard_response(
+                db=db,
+                code=row.fund_code,
+                horizon="short",
+                pred=short_pred,
+                quote=quote,
+                news_signal=news_signal,
+                market_ctx=market_ctx,
+            )
+            if short_pred
+            else None
         )
-        signal = _watchlist_signal(short_up=short_up, mid_up=mid_up)
+        mid_scorecard = (
+            _build_scorecard_response(
+                db=db,
+                code=row.fund_code,
+                horizon="mid",
+                pred=mid_pred,
+                quote=quote,
+                news_signal=news_signal,
+                market_ctx=market_ctx,
+            )
+            if mid_pred
+            else None
+        )
+        risk_source_score = short_scorecard.risk_score if short_scorecard else mid_scorecard.risk_score if mid_scorecard else 35
+        risk_level = risk_level_from_score(risk_source_score)
+        signal = short_scorecard.signal_bias if short_scorecard else mid_scorecard.signal_bias if mid_scorecard else "数据不足"
+        action_label = short_scorecard.action_label if short_scorecard else mid_scorecard.action_label if mid_scorecard else "观察"
+        score_summary = short_scorecard.summary if short_scorecard else mid_scorecard.summary if mid_scorecard else "暂无评分结果"
         items.append(
             WatchlistInsightItem(
                 fund_code=row.fund_code,
@@ -641,6 +745,11 @@ def watchlist_insights_get(
                 short_confidence=short_conf,
                 mid_up_probability=mid_up,
                 mid_confidence=mid_conf,
+                short_score=short_scorecard.total_score if short_scorecard else None,
+                mid_score=mid_scorecard.total_score if mid_scorecard else None,
+                risk_score=risk_source_score,
+                action_label=action_label,
+                score_summary=score_summary,
                 data_freshness=data_freshness,
                 risk_level=risk_level,
                 signal=signal,

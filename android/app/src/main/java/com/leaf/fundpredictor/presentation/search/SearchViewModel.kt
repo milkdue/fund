@@ -15,6 +15,7 @@ import kotlinx.coroutines.launch
 data class SearchUiState(
     val query: String = "",
     val items: List<Fund> = emptyList(),
+    val alertFundCodes: Set<String> = emptySet(),
     val loading: Boolean = false,
     val error: String? = null,
 )
@@ -39,9 +40,22 @@ class SearchViewModel @Inject constructor(
                 if (query.isBlank()) repository.hotFunds() else repository.searchFunds(query)
             }
                 .onSuccess { funds ->
+                    val alertFundCodes = runCatching { repository.getAlertRules() }
+                        .onFailure { ex ->
+                            Log.w(
+                                "SearchViewModel",
+                                "get alert rules failed, type=${ex::class.java.simpleName}, msg=${ex.message}",
+                            )
+                        }
+                        .getOrDefault(emptyList())
+                        .asSequence()
+                        .filter { it.enabled }
+                        .map { it.fundCode }
+                        .toSet()
                     _uiState.value = _uiState.value.copy(
                         loading = false,
                         items = funds,
+                        alertFundCodes = alertFundCodes,
                     )
                 }
                 .onFailure { ex ->

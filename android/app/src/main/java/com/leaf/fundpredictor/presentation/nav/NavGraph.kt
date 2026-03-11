@@ -30,6 +30,7 @@ import com.leaf.fundpredictor.presentation.detail.DetailScreen
 import com.leaf.fundpredictor.presentation.detail.DetailViewModel
 import com.leaf.fundpredictor.presentation.home.HomeScreen
 import com.leaf.fundpredictor.presentation.home.HomeViewModel
+import com.leaf.fundpredictor.presentation.learn.LearnScreen
 import com.leaf.fundpredictor.presentation.risk.RiskScreen
 import com.leaf.fundpredictor.presentation.search.SearchScreen
 import com.leaf.fundpredictor.presentation.search.SearchViewModel
@@ -42,6 +43,7 @@ private object Route {
     const val Search = "search"
     const val Alerts = "alerts"
     const val Watchlist = "watchlist"
+    const val Learn = "learn"
     const val Detail = "detail/{code}"
 }
 
@@ -152,6 +154,7 @@ fun FundNavGraph(
                     onOpenSearch = { navigateTab(Route.Search) },
                     onOpenWatchlist = { navigateTab(Route.Watchlist) },
                     onOpenAlerts = { navigateTab(Route.Alerts) },
+                    onOpenLearn = { navController.navigate(Route.Learn) },
                 )
             }
 
@@ -177,12 +180,22 @@ fun FundNavGraph(
 
             composable(Route.Watchlist) {
                 val vm: WatchlistViewModel = hiltViewModel()
-                WatchlistScreen(viewModel = vm, onBack = { navigateTab(Route.Home) })
+                WatchlistScreen(
+                    viewModel = vm,
+                    onBack = { navigateTab(Route.Home) },
+                    onOpenDetail = { code -> navController.navigate("detail/$code") },
+                )
             }
 
             composable(Route.Alerts) {
                 val vm: AlertsViewModel = hiltViewModel()
                 AlertsScreen(viewModel = vm)
+            }
+
+            composable(Route.Learn) {
+                LearnScreen(
+                    onBack = { navController.popBackStack() },
+                )
             }
         }
     }

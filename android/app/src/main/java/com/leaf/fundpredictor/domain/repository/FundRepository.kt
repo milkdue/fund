@@ -11,6 +11,7 @@ import com.leaf.fundpredictor.domain.model.WatchlistItem
 import com.leaf.fundpredictor.domain.model.AiJudgement
 import com.leaf.fundpredictor.domain.model.DataHealth
 import com.leaf.fundpredictor.domain.model.AlertEvent
+import com.leaf.fundpredictor.domain.model.AlertRule
 
 interface FundRepository {
     suspend fun searchFunds(query: String): List<Fund>
@@ -24,6 +25,7 @@ interface FundRepository {
     suspend fun getWatchlist(): List<WatchlistItem>
     suspend fun getWatchlistInsights(): List<WatchlistInsight>
     suspend fun getDataHealth(): DataHealth
+    suspend fun getAlertRules(): List<AlertRule>
     suspend fun getAlertEvents(limit: Int = 30): List<AlertEvent>
     suspend fun addWatchlist(code: String): WatchlistItem
     suspend fun submitFeedback(code: String, horizon: String, isHelpful: Boolean, score: Int = 3): Boolean

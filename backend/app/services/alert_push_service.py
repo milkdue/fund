@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from urllib.parse import quote
 
 import httpx
@@ -46,6 +47,8 @@ def push_bark_message(*, title: str, body: str) -> bool:
 
 
 def push_alert_event_to_bark(event: AlertEvent) -> bool:
-    title = f"基金阈值提醒 {event.fund_code}"
+    match = re.match(r"^\[([^\]]+)\]", event.message or "")
+    prefix = match.group(1) if match else "基金提醒"
+    title = f"{prefix} {event.fund_code}"
     body = f"{event.horizon} | {event.message}"
     return push_bark_message(title=title, body=body)

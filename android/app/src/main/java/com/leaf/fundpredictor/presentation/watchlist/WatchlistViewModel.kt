@@ -17,6 +17,7 @@ data class WatchlistUiState(
     val loading: Boolean = false,
     val items: List<WatchlistItem> = emptyList(),
     val insights: List<WatchlistInsight> = emptyList(),
+    val alertFundCodes: Set<String> = emptySet(),
     val diagnosticsNote: String? = null,
 )
 
@@ -40,10 +41,20 @@ class WatchlistViewModel @Inject constructor(
                     Log.e("WatchlistViewModel", "load failed, type=${ex::class.java.simpleName}, msg=${ex.message}", ex)
                 }
                 .getOrDefault(emptyList())
+            val alertFundCodes = runCatching { repository.getAlertRules() }
+                .onFailure { ex ->
+                    Log.e("WatchlistViewModel", "alert rules failed, type=${ex::class.java.simpleName}, msg=${ex.message}", ex)
+                }
+                .getOrDefault(emptyList())
+                .asSequence()
+                .filter { it.enabled }
+                .map { it.fundCode }
+                .toSet()
             _uiState.value = _uiState.value.copy(
                 loading = false,
                 items = rows,
                 insights = insights,
+                alertFundCodes = alertFundCodes,
                 diagnosticsNote = if (insights.isEmpty() && rows.isNotEmpty()) "洞察数据暂不可用，展示本地自选列表" else null,
             )
         }

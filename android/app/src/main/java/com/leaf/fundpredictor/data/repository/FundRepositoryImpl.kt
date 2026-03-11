@@ -8,6 +8,7 @@ import com.leaf.fundpredictor.data.remote.FundApi
 import com.leaf.fundpredictor.data.remote.WatchlistAddRequest
 import com.leaf.fundpredictor.domain.model.AiJudgement
 import com.leaf.fundpredictor.domain.model.AlertEvent
+import com.leaf.fundpredictor.domain.model.AlertRule
 import com.leaf.fundpredictor.domain.model.DataHealth
 import com.leaf.fundpredictor.domain.model.Explain
 import com.leaf.fundpredictor.domain.model.ExplainFactor
@@ -17,6 +18,8 @@ import com.leaf.fundpredictor.domain.model.Prediction
 import com.leaf.fundpredictor.domain.model.PredictionChange
 import com.leaf.fundpredictor.domain.model.PredictionChangeFactor
 import com.leaf.fundpredictor.domain.model.Quote
+import com.leaf.fundpredictor.domain.model.ScoreCard
+import com.leaf.fundpredictor.domain.model.ScoreComponent
 import com.leaf.fundpredictor.domain.model.WatchlistInsight
 import com.leaf.fundpredictor.domain.model.WatchlistItem
 import com.leaf.fundpredictor.domain.repository.FundRepository
@@ -42,6 +45,7 @@ class FundRepositoryImpl @Inject constructor(
 
     override suspend fun getPrediction(code: String, horizon: String): Prediction {
         val dto = api.getPrediction(code, horizon)
+        val scorecardDto = dto.scorecard
         return Prediction(
             dto.code,
             dto.horizon,
@@ -53,6 +57,22 @@ class FundRepositoryImpl @Inject constructor(
             dto.modelVersion,
             dto.dataSource,
             dto.snapshotId,
+            ScoreCard(
+                horizon = scorecardDto?.horizon ?: dto.horizon,
+                totalScore = scorecardDto?.totalScore ?: ((dto.upProbability * 100).toInt()),
+                riskScore = scorecardDto?.riskScore ?: (dto.confidence * 100).toInt(),
+                actionLabel = scorecardDto?.actionLabel ?: "观察",
+                signalBias = scorecardDto?.signalBias ?: "震荡",
+                summary = scorecardDto?.summary ?: "当前后端尚未返回评分卡，先展示基础量化结果。",
+                components = scorecardDto?.components?.map {
+                    ScoreComponent(
+                        key = it.key,
+                        label = it.label,
+                        score = it.score,
+                        summary = it.summary,
+                    )
+                } ?: emptyList(),
+            ),
         )
     }
 
@@ -144,6 +164,11 @@ class FundRepositoryImpl @Inject constructor(
                 shortConfidence = it.shortConfidence,
                 midUpProbability = it.midUpProbability,
                 midConfidence = it.midConfidence,
+                shortScore = it.shortScore,
+                midScore = it.midScore,
+                riskScore = it.riskScore,
+                actionLabel = it.actionLabel,
+                scoreSummary = it.scoreSummary,
                 dataFreshness = it.dataFreshness,
                 riskLevel = it.riskLevel,
                 signal = it.signal,
@@ -163,6 +188,18 @@ class FundRepositoryImpl @Inject constructor(
             marketFreshness = dto.marketFreshness,
             sourceStatus = dto.sourceStatus,
         )
+    }
+
+    override suspend fun getAlertRules(): List<AlertRule> {
+        return api.getAlertRules().map {
+            AlertRule(
+                id = it.id,
+                userId = it.userId,
+                fundCode = it.fundCode,
+                horizon = it.horizon,
+                enabled = it.enabled,
+            )
+        }
     }
 
     override suspend fun getAlertEvents(limit: Int): List<AlertEvent> {
