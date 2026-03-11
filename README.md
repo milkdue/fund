@@ -127,10 +127,23 @@ cd android
 - 当 `FUND_AUTH_ENABLED=true` 时，以下接口需 `Authorization: Bearer <token>`：
   `POST /v1/funds/{code}/feedback`、`/v1/user/watchlist*`、`/v1/user/alerts*`、`/v1/user/events`、`/v1/user/weekly-report`。
 
-### 每日自动刷新（Vercel Cron）
-- 已在 `vercel.json` 配置：`0 2 * * *`（每天 UTC 02:00）
-- 触发路径：`/v1/internal/cron/daily-refresh`
-- 该接口要求 `Authorization: Bearer <CRON_SECRET>`，Vercel Cron 会自动携带。
+### 每日自动刷新（GitHub Actions）
+- 已迁移到 `.github/workflows/daily-refresh.yml`
+- 调度时间：每天 `12:30 UTC`，即北京时间 `20:30`
+- 运行方式：GitHub Actions 直接连接数据库执行 `backend/app/workers/daily_job.py`
+- 这样不再受 Vercel Serverless `30s` 时限影响
+
+GitHub Actions 需要至少配置以下 Repository Secrets：
+- `FUND_DB_URL`
+
+可选 Secrets：
+- `FUND_BARK_USER_KEY`
+- `FUND_BARK_BASE_URL`
+- `FUND_BARK_GROUP`
+- `FUND_BARK_TIMEOUT_MS`
+
+支持在 Actions 页面手动执行 `Daily Refresh`，并通过 `codes` 输入只刷新指定基金，例如：
+- `110022,161725,005827`
 
 ### 每周回测报表（Vercel Cron）
 - 已在 `vercel.json` 配置：`0 3 * * 1`（每周一 UTC 03:00）

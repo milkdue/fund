@@ -1,0 +1,70 @@
+name: Daily Refresh
+
+on:
+  schedule:
+    - cron: "30 12 * * *"
+  workflow_dispatch:
+    inputs:
+      codes:
+        description: "Optional comma-separated fund codes"
+        required: false
+        type: string
+
+concurrency:
+  group: daily-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+
+      - name: Prepare refresh environment
+        shell: bash
+        run: |
+          if [ -z "${{ secrets.FUND_DB_URL }}" ]; then
+            echo "FUND_DB_URL secret is required" >&2
+            exit 1
+          fi
+
+          echo "FUND_ENV=prod" >> "$GITHUB_ENV"
+          echo "FUND_DB_URL=${{ secrets.FUND_DB_URL }}" >> "$GITHUB_ENV"
+          echo "FUND_AUTO_CREATE_TABLES=true" >> "$GITHUB_ENV"
+          echo "FUND_BOOTSTRAP_DEMO_DATA=false" >> "$GITHUB_ENV"
+          echo "FUND_SOURCE_NAV_LIMIT_PER_MIN=90" >> "$GITHUB_ENV"
+          echo "FUND_SOURCE_NEWS_LIMIT_PER_MIN=20" >> "$GITHUB_ENV"
+          echo "FUND_SOURCE_MARKET_LIMIT_PER_MIN=30" >> "$GITHUB_ENV"
+
+          if [ -n "${{ github.event.inputs.codes }}" ]; then
+            echo "FUND_REFRESH_CODES=${{ github.event.inputs.codes }}" >> "$GITHUB_ENV"
+          fi
+
+          if [ -n "${{ secrets.FUND_BARK_USER_KEY }}" ]; then
+            echo "FUND_BARK_ENABLED=true" >> "$GITHUB_ENV"
+            echo "FUND_BARK_USER_KEY=${{ secrets.FUND_BARK_USER_KEY }}" >> "$GITHUB_ENV"
+            echo "FUND_BARK_BASE_URL=https://api.day.app" >> "$GITHUB_ENV"
+            echo "FUND_BARK_GROUP=fund_predictor" >> "$GITHUB_ENV"
+            echo "FUND_BARK_TIMEOUT_MS=5000" >> "$GITHUB_ENV"
+          else
+            echo "FUND_BARK_ENABLED=false" >> "$GITHUB_ENV"
+          fi
+
+      - name: Run daily refresh
+        working-directory: backend
+        run: python scripts/run_daily_refresh.py
