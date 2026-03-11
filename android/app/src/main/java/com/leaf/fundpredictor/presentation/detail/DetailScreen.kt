@@ -489,6 +489,11 @@ private fun PredictionCard(title: String, prediction: Prediction) {
                 )
             }
             Text(
+                "方向结论：${signalBiasSummary(prediction.scorecard.signalBias, prediction.horizon, prediction.expectedReturnPct)}",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
                 prediction.scorecard.summary,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -744,6 +749,15 @@ private fun ScoreDetailLines(component: ScoreComponent) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+    }
+}
+
+private fun signalBiasSummary(bias: String, horizon: String, expectedReturnPct: Double): String {
+    val window = if (horizon == "short") "未来1-7天" else "未来1-3个月"
+    return when (bias) {
+        "偏多" -> if (expectedReturnPct >= 2.5) "${window}更偏向上行，趋势相对明确" else "${window}略偏上行，但还不是强趋势"
+        "偏空" -> if (expectedReturnPct <= -1.0) "${window}更偏向回落，建议先控制风险" else "${window}略偏下行，先以观察为主"
+        else -> if (expectedReturnPct >= 0) "${window}大概率震荡，略偏上行" else "${window}大概率震荡，略偏下行"
     }
 }
 

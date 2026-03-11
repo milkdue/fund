@@ -101,6 +101,8 @@ def _build_alert_context(db: Session, *, pred: Prediction) -> tuple[object | Non
         sentiment_score=news_signal.sentiment_score if news_signal else 0.0,
         event_score=news_signal.event_score if news_signal else 0.0,
         volume_shock_score=news_signal.volume_shock if news_signal else 0.0,
+        news_headline_count=news_signal.headline_count if news_signal else 0,
+        news_sample_title=news_signal.sample_title if news_signal else None,
         risk_flags=risk_flags,
         market_source_degraded=market_ctx.source_degraded,
         ai_payload=ai_payload,

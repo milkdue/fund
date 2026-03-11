@@ -24,6 +24,10 @@ class ScoreCardResult:
     components: list[ScoreComponentResult]
 
 
+def _horizon_window_text(horizon: str) -> str:
+    return "未来1-7天" if horizon == "short" else "未来1-3个月"
+
+
 def _clamp(value: float, lower: float, upper: float) -> float:
     return max(lower, min(upper, value))
 
@@ -65,6 +69,100 @@ def _agreement_text(value: str | None) -> str:
     if lowered == "disagree":
         return "AI 与量化存在分歧"
     return "暂无 AI 一致性判断"
+
+
+def _signal_bias_summary(
+    *,
+    signal_bias: str,
+    horizon: str,
+    up_probability: float,
+    expected_return_pct: float,
+) -> str:
+    window = _horizon_window_text(horizon)
+    if signal_bias == "偏多":
+        strength = "上行倾向较明确" if up_probability >= 0.66 or expected_return_pct >= (2.6 if horizon == "short" else 6.0) else "略偏上行"
+        return f"{window}{strength}"
+    if signal_bias == "偏空":
+        strength = "回落压力较明显" if up_probability <= 0.40 or expected_return_pct <= (-1.2 if horizon == "short" else -3.5) else "略偏下行"
+        return f"{window}{strength}"
+    if up_probability >= 0.55 and expected_return_pct >= 0:
+        return f"{window}震荡中略偏上行"
+    if up_probability <= 0.45 or expected_return_pct < 0:
+        return f"{window}震荡中略偏下行"
+    return f"{window}更可能区间震荡"
+
+
+def _market_state_text(market_score: float) -> str:
+    if market_score >= 1.1:
+        return "市场明显偏暖"
+    if market_score >= 0.35:
+        return "市场中性偏暖"
+    if market_score > -0.35:
+        return "市场中性震荡"
+    if market_score > -1.1:
+        return "市场偏弱"
+    return "市场承压明显"
+
+
+def _style_state_text(style_score: float) -> str:
+    if style_score >= 1.0:
+        return "成长风格明显占优"
+    if style_score >= 0.25:
+        return "成长风格略占优"
+    if style_score <= -1.0:
+        return "价值/大盘风格明显占优"
+    if style_score <= -0.25:
+        return "价值/大盘风格略占优"
+    return "风格相对均衡"
+
+
+def _market_implication_text(market_score: float, style_score: float) -> str:
+    if market_score >= 0.35:
+        if style_score >= 0.25:
+            return "风险偏好有改善，强势成长方向更容易获得溢价，但不宜追高。"
+        if style_score <= -0.25:
+            return "风险偏好有改善，但资金更偏向大盘/价值方向。"
+        return "市场情绪不差，顺势观察强势方向比逆势抄底更合适。"
+    if market_score <= -0.35:
+        return "市场整体偏谨慎，更适合控制仓位，减少激进操作。"
+    return "市场缺少明确趋势，适合以观察和分批决策为主。"
+
+
+def _narrative_state_text(
+    *,
+    sentiment_score: float,
+    event_score: float,
+    volume_shock_score: float,
+    headline_count: int,
+) -> str:
+    if headline_count <= 0:
+        return "近3日未抓到显著公告/舆情，按中性处理"
+
+    composite = 0.55 * sentiment_score + 0.35 * event_score + 0.10 * volume_shock_score
+    if composite >= 0.25:
+        return "近3日公告/舆情偏利好"
+    if composite <= -0.25:
+        return "近3日公告/舆情偏利空"
+    return "近3日公告/舆情偏中性"
+
+
+def _volume_shock_text(volume_shock_score: float) -> str:
+    if volume_shock_score >= 0.5:
+        return "热度明显升温"
+    if volume_shock_score >= 0.15:
+        return "热度略有升温"
+    if volume_shock_score <= -0.5:
+        return "热度明显降温"
+    if volume_shock_score <= -0.15:
+        return "热度略有降温"
+    return "热度基本平稳"
+
+
+def _clean_sample_title(title: str | None) -> str | None:
+    cleaned = (title or "").strip()
+    if not cleaned or cleaned == "暂无新增公告/舆情":
+        return None
+    return cleaned[:80]
 
 
 def _freshness_text(value: str) -> str:
@@ -142,6 +240,8 @@ def build_prediction_scorecard(
     sentiment_score: float = 0.0,
     event_score: float = 0.0,
     volume_shock_score: float = 0.0,
+    news_headline_count: int = 0,
+    news_sample_title: str | None = None,
     risk_flags: list[str] | None = None,
     market_source_degraded: bool = False,
     ai_payload: Mapping[str, object] | None = None,
@@ -227,6 +327,12 @@ def build_prediction_scorecard(
         up_probability=up_probability,
         expected_return_pct=expected_return_pct,
     )
+    direction_view = _signal_bias_summary(
+        signal_bias=signal_bias,
+        horizon=horizon,
+        up_probability=up_probability,
+        expected_return_pct=expected_return_pct,
+    )
     action_label = _action_label(
         total_score=total_score,
         risk_score=risk_score,
@@ -236,7 +342,14 @@ def build_prediction_scorecard(
         expected_return_pct=expected_return_pct,
     )
 
-    market_phrase = "市场环境偏正面" if market_component >= 65 else "市场环境一般" if market_component >= 45 else "市场环境偏弱"
+    market_phrase = _market_state_text(market_score)
+    style_phrase = _style_state_text(style_score)
+    narrative_phrase = _narrative_state_text(
+        sentiment_score=sentiment_score,
+        event_score=event_score,
+        volume_shock_score=volume_shock_score,
+        headline_count=news_headline_count,
+    )
     risk_phrase = "风险相对可控" if risk_score >= 65 else "风险中等" if risk_score >= 45 else "风险偏高"
     ai_phrase = ""
     if ai_payload:
@@ -246,16 +359,19 @@ def build_prediction_scorecard(
             "disagree": "，AI 与量化存在分歧",
         }.get((agreement or "").lower(), "")
     summary = (
-        f"{action_label}，综合评分{total_score}。上涨概率 {up_probability * 100:.2f}%，"
-        f"预期涨跌幅 {expected_return_pct:.2f}%，{market_phrase}，{risk_phrase}{ai_phrase}。"
+        f"{action_label}，综合评分{total_score}。方向结论：{direction_view}。"
+        f"上涨概率 {up_probability * 100:.2f}%，预期涨跌幅 {expected_return_pct:.2f}%。"
+        f"市场结论：{market_phrase}，{style_phrase}。"
+        f"舆情结论：{narrative_phrase}。{risk_phrase}{ai_phrase}。"
     )
 
     direction_summary = (
-        f"因为上涨概率 {up_probability * 100:.2f}%"
+        f"方向结论：{direction_view}。因为上涨概率 {up_probability * 100:.2f}%"
         + (f"、AI 调整后概率 {ai_prob * 100:.2f}%" if ai_payload else "")
         + f"、{agreement_text if ai_payload else '当前未接入 AI 加权'}，所以方向判断 {int(_clamp(direction_score, 0.0, 100.0))} 分。"
     )
     direction_details = [
+        f"方向结论：{direction_view}",
         f"量化上涨概率：{up_probability * 100:.2f}%",
         *( [f"AI 调整后上涨概率：{ai_prob * 100:.2f}%"] if ai_payload else [] ),
         f"一致性判断：{agreement_text}",
@@ -272,20 +388,28 @@ def build_prediction_scorecard(
     ]
 
     market_summary = (
-        f"因为市场环境分 {market_score:.2f}、风格偏好分 {style_score:.2f}，"
+        f"市场结论：{market_phrase}，{style_phrase}。因为市场环境分 {market_score:.2f}、风格偏好分 {style_score:.2f}，"
         f"所以市场环境 {int(_clamp(market_component, 0.0, 100.0))} 分。"
     )
     market_details = [
+        f"市场结论：{market_phrase}",
+        f"风格结论：{style_phrase}",
+        f"当前含义：{_market_implication_text(market_score, style_score)}",
         f"市场环境分：{market_score:.2f}",
         f"风格偏好分：{style_score:.2f}",
         f"市场源状态：{'降级' if market_source_degraded else '正常'}",
     ]
 
+    sample_title = _clean_sample_title(news_sample_title)
     narrative_summary = (
-        f"因为舆情情绪 {sentiment_score:.2f}、公告事件 {event_score:.2f}、热度冲击 {volume_shock_score:.2f}，"
+        f"舆情结论：{narrative_phrase}。因为舆情情绪 {sentiment_score:.2f}、公告事件 {event_score:.2f}、热度冲击 {volume_shock_score:.2f}，"
         f"所以舆情事件 {int(_clamp(narrative_score, 0.0, 100.0))} 分。"
     )
     narrative_details = [
+        f"舆情结论：{narrative_phrase}",
+        f"近3日抓取样本：{news_headline_count} 条",
+        *( [f"代表性标题：{sample_title}"] if sample_title else ["代表性标题：暂无可用公告/舆情样本"] ),
+        f"热度判断：{_volume_shock_text(volume_shock_score)}",
         f"舆情情绪分：{sentiment_score:.2f}",
         f"事件冲击分：{event_score:.2f}",
         f"热度冲击分：{volume_shock_score:.2f}",
@@ -299,16 +423,18 @@ def build_prediction_scorecard(
         f"，风险标签 {len(risk_flags)} 个，所以风险控制 {int(_clamp(risk_control_score, 0.0, 100.0))} 分。"
     )
     risk_details = [
+        f"风险结论：{'当前波动不大，风险可控' if risk_score >= 65 else '风险处于中等区间' if risk_score >= 45 else '波动和不确定性偏高'}",
         f"20日波动率：{f'{volatility_20d:.2f}%' if volatility_20d is not None else '暂无'}",
         f"风险标签数量：{_risk_flag_count(risk_flags)}",
         f"风险标签：{'、'.join(risk_flags[:3]) if risk_flags else '暂无'}",
     ]
 
     credibility_summary = (
-        f"因为量化置信度 {confidence * 100:.2f}% 、数据新鲜度 {_freshness_text(data_freshness)}，"
+        f"可信度结论：当前数据{_freshness_text(data_freshness)}。因为量化置信度 {confidence * 100:.2f}% 、数据新鲜度 {_freshness_text(data_freshness)}，"
         f"所以可信度 {int(_clamp(credibility_score, 0.0, 100.0))} 分。"
     )
     credibility_details = [
+        f"可信度结论：{'当前可参考性较好' if credibility_score >= 70 else '当前可参考性一般' if credibility_score >= 45 else '当前可参考性偏弱'}",
         f"量化置信度：{confidence * 100:.2f}%",
         f"数据新鲜度：{_freshness_text(data_freshness)}",
         f"市场数据源：{'降级' if market_source_degraded else '正常'}",

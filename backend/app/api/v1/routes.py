@@ -270,6 +270,8 @@ def _build_scorecard_response(
         sentiment_score=sentiment_score,
         event_score=event_score,
         volume_shock_score=volume_shock_score,
+        news_headline_count=news_signal.headline_count if news_signal else 0,
+        news_sample_title=news_signal.sample_title if news_signal else None,
         risk_flags=risk_flags,
         market_source_degraded=market_ctx.source_degraded,
         ai_payload=ai_payload,
