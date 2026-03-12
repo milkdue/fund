@@ -7,7 +7,8 @@ from app.models.entities import AlertEvent, AlertRule, Prediction
 from app.services.ai_second_opinion import peek_ai_second_opinion
 from app.services.market_context_service import get_or_refresh_market_context
 from app.services.predictor import build_risk_flags
-from app.services.repository import latest_news_signal, latest_quote
+from app.services.repository import latest_quote
+from app.services.effective_news_service import build_effective_news_signal
 from app.services.score_service import build_prediction_scorecard
 
 
@@ -78,14 +79,14 @@ def _freshness(as_of) -> str:
 
 def _build_alert_context(db: Session, *, pred: Prediction) -> tuple[object | None, object | None, object, dict | None, list[str], object]:
     quote = latest_quote(db, pred.fund_code)
-    news_signal = latest_news_signal(db, pred.fund_code)
+    news_signal = build_effective_news_signal(db, pred.fund_code, reference_time=pred.as_of)
     market_ctx = get_or_refresh_market_context(db)
     risk_flags = build_risk_flags(
         volatility_20d=quote.volatility_20d if quote else None,
         confidence=pred.confidence,
-        sentiment_score=news_signal.sentiment_score if news_signal else 0.0,
-        event_score=news_signal.event_score if news_signal else 0.0,
-        volume_shock_score=news_signal.volume_shock if news_signal else 0.0,
+        sentiment_score=news_signal.sentiment_score,
+        event_score=news_signal.event_score,
+        volume_shock_score=news_signal.volume_shock,
         market_source_degraded=market_ctx.source_degraded,
     )
     ai_payload = peek_ai_second_opinion(db, pred.fund_code, pred.horizon, pred.as_of)
@@ -98,11 +99,14 @@ def _build_alert_context(db: Session, *, pred: Prediction) -> tuple[object | Non
         volatility_20d=quote.volatility_20d if quote else None,
         market_score=market_ctx.market_score,
         style_score=market_ctx.style_score,
-        sentiment_score=news_signal.sentiment_score if news_signal else 0.0,
-        event_score=news_signal.event_score if news_signal else 0.0,
-        volume_shock_score=news_signal.volume_shock if news_signal else 0.0,
-        news_headline_count=news_signal.headline_count if news_signal else 0,
-        news_sample_title=news_signal.sample_title if news_signal else None,
+        sentiment_score=news_signal.sentiment_score,
+        event_score=news_signal.event_score,
+        volume_shock_score=news_signal.volume_shock,
+        news_headline_count=news_signal.headline_count,
+        news_sample_title=news_signal.sample_title,
+        latest_news_age_days=news_signal.latest_age_days,
+        news_impact_strength=news_signal.impact_strength,
+        news_impact_summary=news_signal.impact_summary,
         risk_flags=risk_flags,
         market_source_degraded=market_ctx.source_degraded,
         ai_payload=ai_payload,

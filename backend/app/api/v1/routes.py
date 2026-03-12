@@ -63,6 +63,7 @@ from app.services.model_ab_service import ab_summary, list_latest_ab_results
 from app.services.news_sync import NewsSyncError, NewsSyncRateLimitError, refresh_news_signals_for_code
 from app.services.ai_second_opinion import AiSecondOpinionError, get_ai_second_opinion, peek_ai_second_opinion
 from app.services.alert_push_service import push_bark_message
+from app.services.effective_news_service import build_effective_news_signal
 from app.services.predictor import build_risk_flags, confidence_interval, explain_features
 from app.services.score_service import build_prediction_scorecard, risk_level_from_score
 from app.services.fund_search_source import FundSearchError, FundSearchRateLimitError, remote_search_funds
@@ -81,7 +82,6 @@ from app.services.repository import (
     get_watchlist,
     latest_intraday_estimate,
     latest_backtest_report,
-    latest_news_signal,
     latest_prediction,
     latest_quote,
     previous_quote,
@@ -262,12 +262,12 @@ def _build_scorecard_response(
     horizon: str,
     pred,
     quote,
-    news_signal,
     market_ctx,
 ):
-    sentiment_score = news_signal.sentiment_score if news_signal else 0.0
-    event_score = news_signal.event_score if news_signal else 0.0
-    volume_shock_score = news_signal.volume_shock if news_signal else 0.0
+    effective_news = build_effective_news_signal(db, code, reference_time=pred.as_of)
+    sentiment_score = effective_news.sentiment_score
+    event_score = effective_news.event_score
+    volume_shock_score = effective_news.volume_shock
     risk_flags = build_risk_flags(
         volatility_20d=quote.volatility_20d if quote else None,
         confidence=pred.confidence,
@@ -289,8 +289,11 @@ def _build_scorecard_response(
         sentiment_score=sentiment_score,
         event_score=event_score,
         volume_shock_score=volume_shock_score,
-        news_headline_count=news_signal.headline_count if news_signal else 0,
-        news_sample_title=news_signal.sample_title if news_signal else None,
+        news_headline_count=effective_news.headline_count,
+        news_sample_title=effective_news.sample_title,
+        latest_news_age_days=effective_news.latest_age_days,
+        news_impact_strength=effective_news.impact_strength,
+        news_impact_summary=effective_news.impact_summary,
         risk_flags=risk_flags,
         market_source_degraded=market_ctx.source_degraded,
         ai_payload=ai_payload,
@@ -462,7 +465,6 @@ def fund_predict(code: str, horizon: str = Query(pattern="^(short|mid)$"), db: S
     snapshot = latest_snapshot(db, fund_code=code, horizon=horizon)
     fallback_model = settings.model_short_version if horizon == "short" else settings.model_mid_version
     quote = latest_quote(db, code)
-    news_signal = latest_news_signal(db, code)
     market_ctx = get_or_refresh_market_context(db)
     return PredictResponse(
         code=pred.fund_code,
@@ -481,7 +483,6 @@ def fund_predict(code: str, horizon: str = Query(pattern="^(short|mid)$"), db: S
             horizon=horizon,
             pred=pred,
             quote=quote,
-            news_signal=news_signal,
             market_ctx=market_ctx,
         ),
     )
@@ -605,11 +606,11 @@ def fund_explain(code: str, horizon: str = Query(pattern="^(short|mid)$"), db: S
     if not pred:
         raise HTTPException(status_code=404, detail="prediction not found")
     quote = latest_quote(db, code)
-    news_signal = latest_news_signal(db, code)
+    news_signal = build_effective_news_signal(db, code, reference_time=pred.as_of)
     market_ctx = latest_market_context(db)
-    sentiment_score = news_signal.sentiment_score if news_signal else 0.0
-    event_score = news_signal.event_score if news_signal else 0.0
-    volume_shock_score = news_signal.volume_shock if news_signal else 0.0
+    sentiment_score = news_signal.sentiment_score
+    event_score = news_signal.event_score
+    volume_shock_score = news_signal.volume_shock
     volatility_20d = quote.volatility_20d if quote else None
     return ExplainResponse(
         code=code,
@@ -678,28 +679,20 @@ def fund_kline(code: str, days: int = Query(default=60, ge=10, le=240)):
 
 @router.get("/funds/{code}/news-signal", response_model=NewsSignalResponse)
 def fund_news_signal(code: str, db: Session = Depends(get_db)):
-    row = latest_news_signal(db, code)
-    if not row:
-        _refresh_news_signal_soft(db, code)
-        row = latest_news_signal(db, code)
-    if not row:
-        return NewsSignalResponse(
-            code=code,
-            trade_date=datetime.now(tz=UTC).date().isoformat(),
-            headline_count=0,
-            sentiment_score=0.0,
-            event_score=0.0,
-            volume_shock=0.0,
-            sample_title="暂无新增公告/舆情",
-        )
+    _refresh_news_signal_soft(db, code)
+    effective = build_effective_news_signal(db, code)
     return NewsSignalResponse(
         code=code,
-        trade_date=row.trade_date.isoformat(),
-        headline_count=row.headline_count,
-        sentiment_score=row.sentiment_score,
-        event_score=row.event_score,
-        volume_shock=row.volume_shock,
-        sample_title=row.sample_title,
+        trade_date=effective.trade_date,
+        headline_count=effective.headline_count,
+        sentiment_score=effective.sentiment_score,
+        event_score=effective.event_score,
+        volume_shock=effective.volume_shock,
+        sample_title=effective.sample_title,
+        latest_published_at=effective.latest_published_at,
+        latest_age_days=effective.latest_age_days,
+        impact_strength=effective.impact_strength,
+        impact_summary=effective.impact_summary,
     )
 
 
@@ -811,7 +804,6 @@ def watchlist_insights_get(
         short_pred = latest_prediction(db, row.fund_code, "short")
         mid_pred = latest_prediction(db, row.fund_code, "mid")
         quote = latest_quote(db, row.fund_code)
-        news_signal = latest_news_signal(db, row.fund_code)
         latest_as_of = max(
             [ts for ts in [short_pred.as_of if short_pred else None, mid_pred.as_of if mid_pred else None] if ts],
             default=None,
@@ -828,7 +820,6 @@ def watchlist_insights_get(
                 horizon="short",
                 pred=short_pred,
                 quote=quote,
-                news_signal=news_signal,
                 market_ctx=market_ctx,
             )
             if short_pred
@@ -841,7 +832,6 @@ def watchlist_insights_get(
                 horizon="mid",
                 pred=mid_pred,
                 quote=quote,
-                news_signal=news_signal,
                 market_ctx=market_ctx,
             )
             if mid_pred

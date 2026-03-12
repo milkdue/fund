@@ -1,7 +1,7 @@
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models.entities import Fund, NewsSignalDaily, Prediction, Quote, QuoteSourceMeta
+from app.models.entities import Fund, Prediction, Quote, QuoteSourceMeta
 from app.services.fund_data_source import FundDataError, FundDataRateLimitError, fetch_latest_snapshot
 from app.services.alerts_service import evaluate_and_record_alert_events
 from app.services.alert_push_service import push_alert_event_to_bark
@@ -12,6 +12,7 @@ from app.services.prediction_snapshot_service import upsert_prediction_snapshot
 from app.services.predictor import candidate_rule_predictions, rule_based_predictions
 from app.services.quote_quality_service import evaluate_official_nav_quality
 from app.services.repository import previous_quote
+from app.services.effective_news_service import build_effective_news_signal
 
 
 class MarketSyncError(Exception):
@@ -81,16 +82,11 @@ def refresh_fund_data(db: Session, code: str) -> Quote:
     else:
         source_meta.source = snapshot.source
 
-    news_signal = db.scalar(
-        select(NewsSignalDaily)
-        .where(NewsSignalDaily.fund_code == code)
-        .order_by(NewsSignalDaily.trade_date.desc())
-        .limit(1)
-    )
+    effective_news = build_effective_news_signal(db, code, reference_time=snapshot.as_of)
     market_ctx = get_or_refresh_market_context(db)
-    sentiment_score = news_signal.sentiment_score if news_signal else 0.0
-    event_score = news_signal.event_score if news_signal else 0.0
-    volume_shock_score = news_signal.volume_shock if news_signal else 0.0
+    sentiment_score = effective_news.sentiment_score
+    event_score = effective_news.event_score
+    volume_shock_score = effective_news.volume_shock
 
     pred_values = rule_based_predictions(
         snapshot.daily_change_pct,

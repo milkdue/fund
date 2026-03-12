@@ -106,6 +106,10 @@ class NewsSignalResponse(BaseModel):
     event_score: float
     volume_shock: float
     sample_title: str
+    latest_published_at: datetime | None = None
+    latest_age_days: float | None = None
+    impact_strength: str = "neutral"
+    impact_summary: str = ""
 
 
 class WatchlistIn(BaseModel):

@@ -173,6 +173,17 @@ def _narrative_coverage_note(headline_count: int) -> str:
     return "样本量尚可，可以辅助判断近期催化剂和情绪方向。"
 
 
+def _news_impact_strength_text(value: str) -> str:
+    lowered = (value or "").lower()
+    if lowered == "strong":
+        return "当前影响较强"
+    if lowered == "medium":
+        return "当前影响中等"
+    if lowered == "weak":
+        return "当前影响较弱"
+    return "当前影响中性"
+
+
 def _direction_framework_note(horizon: str) -> str:
     if horizon == "short":
         return "这更偏向短期趋势和预期变化的判断，不直接等于基金长期逻辑已经变强。"
@@ -280,6 +291,9 @@ def build_prediction_scorecard(
     volume_shock_score: float = 0.0,
     news_headline_count: int = 0,
     news_sample_title: str | None = None,
+    latest_news_age_days: float | None = None,
+    news_impact_strength: str = "neutral",
+    news_impact_summary: str | None = None,
     risk_flags: list[str] | None = None,
     market_source_degraded: bool = False,
     ai_payload: Mapping[str, object] | None = None,
@@ -447,15 +461,19 @@ def build_prediction_scorecard(
     narrative_summary = (
         f"催化剂层面，{narrative_phrase}。"
         f"{_narrative_coverage_note(news_headline_count)}"
+        + (f" 最近事件距今约 {latest_news_age_days:.1f} 天，{_news_impact_strength_text(news_impact_strength)}。" if latest_news_age_days is not None else "")
     )
     narrative_details = [
         f"舆情结论：{narrative_phrase}",
         f"近3日抓取样本：{news_headline_count} 条",
         *( [f"代表性标题：{sample_title}"] if sample_title else ["代表性标题：暂无可用公告/舆情样本"] ),
+        *( [f"最近事件距今：{latest_news_age_days:.1f} 天"] if latest_news_age_days is not None else ["最近事件距今：暂无"] ),
+        f"影响强度：{_news_impact_strength_text(news_impact_strength)}",
         f"热度判断：{_volume_shock_text(volume_shock_score)}",
         f"舆情情绪分：{sentiment_score:.2f}",
         f"事件冲击分：{event_score:.2f}",
         f"热度冲击分：{volume_shock_score:.2f}",
+        *( [f"时效说明：{news_impact_summary}"] if news_impact_summary else [] ),
         "说明：这一项主要反映公告、舆情和事件催化",
     ]
 

@@ -10,9 +10,10 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.models.entities import AiJudgementCache, AiUsageDaily, Fund
+from app.services.effective_news_service import build_effective_news_signal
 from app.services.market_context_service import get_or_refresh_market_context
 from app.services.predictor import build_risk_flags, explain_features
-from app.services.repository import latest_backtest_report, latest_news_signal, latest_prediction, latest_quote
+from app.services.repository import latest_backtest_report, latest_prediction, latest_quote
 from app.services.time_utils import shanghai_now_naive
 
 
@@ -457,16 +458,16 @@ def get_ai_second_opinion(db: Session, code: str, horizon: str) -> dict:
         return _from_cache_row(existing)
 
     quote = latest_quote(db, code)
-    news_signal = latest_news_signal(db, code)
+    news_signal = build_effective_news_signal(db, code, reference_time=pred.as_of)
     market_ctx = get_or_refresh_market_context(db)
     backtest = latest_backtest_report(db, horizon)
     fund_row = db.scalar(select(Fund).where(Fund.code == code))
     fund_name = fund_row.name if fund_row else code
     category = fund_row.category if fund_row else "未知"
 
-    sentiment_score = news_signal.sentiment_score if news_signal else 0.0
-    event_score = news_signal.event_score if news_signal else 0.0
-    volume_shock = news_signal.volume_shock if news_signal else 0.0
+    sentiment_score = news_signal.sentiment_score
+    event_score = news_signal.event_score
+    volume_shock = news_signal.volume_shock
     factors = explain_features(
         horizon=horizon,
         daily_change_pct=quote.daily_change_pct if quote else None,

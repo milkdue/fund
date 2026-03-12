@@ -42,6 +42,11 @@ def test_end_to_end_read_flow(client):
     assert ai.status_code == 200
     assert ai.json()["provider"]
 
+    news = client.get(f"/v1/funds/{code}/news-signal")
+    assert news.status_code == 200
+    assert "impact_strength" in news.json()
+    assert "impact_summary" in news.json()
+
 
 def test_watchlist_flow(client):
     headers = {"X-User-Id": "android-user"}
