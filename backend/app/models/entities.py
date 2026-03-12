@@ -26,6 +26,30 @@ class Quote(Base):
     as_of: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
 
 
+class IntradayEstimate(Base):
+    __tablename__ = "intraday_estimates"
+    __table_args__ = (UniqueConstraint("fund_code", "as_of", name="uq_intraday_estimate_fund_as_of"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    fund_code: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
+    estimate_nav: Mapped[float] = mapped_column(Float, nullable=False)
+    estimate_change_pct: Mapped[float] = mapped_column(Float, nullable=False)
+    source: Mapped[str] = mapped_column(String(64), nullable=False, default="eastmoney_fundgz")
+    as_of: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+
+
+class QuoteSourceMeta(Base):
+    __tablename__ = "quote_source_meta"
+    __table_args__ = (UniqueConstraint("fund_code", "as_of", name="uq_quote_source_meta_fund_as_of"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    fund_code: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
+    as_of: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
+    source: Mapped[str] = mapped_column(String(64), nullable=False, default="eastmoney_pingzhongdata")
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+
+
 class Prediction(Base):
     __tablename__ = "predictions"
     __table_args__ = (UniqueConstraint("fund_code", "horizon", "as_of", name="uq_pred_fund_horizon_as_of"),)

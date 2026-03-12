@@ -17,8 +17,10 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.Article
 import androidx.compose.material.icons.automirrored.rounded.TrendingUp
 import androidx.compose.material.icons.rounded.AddAlert
+import androidx.compose.material.icons.rounded.Article
 import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material3.ButtonDefaults
@@ -55,7 +57,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.leaf.fundpredictor.domain.model.AiJudgement
+import com.leaf.fundpredictor.domain.model.Estimate
 import com.leaf.fundpredictor.domain.model.KlineCandle
+import com.leaf.fundpredictor.domain.model.NewsSignal
 import com.leaf.fundpredictor.domain.model.Prediction
 import com.leaf.fundpredictor.domain.model.PredictionChange
 import com.leaf.fundpredictor.domain.model.Quote
@@ -188,13 +192,22 @@ fun DetailScreen(code: String, viewModel: DetailViewModel, onBack: () -> Unit) {
 
                 state.quote?.let { quote ->
                     MotionReveal(delayMs = 150) {
-                        QuoteOverviewCard(quote = quote)
+                        QuoteOverviewCard(
+                            quote = quote,
+                            estimate = state.estimate,
+                        )
                     }
 
                     if (state.kline.isNotEmpty()) {
                         MotionReveal(delayMs = 180) {
                             KlineCard(candles = state.kline)
                         }
+                    }
+                }
+
+                state.newsSignal?.let { signal ->
+                    MotionReveal(delayMs = 205) {
+                        NewsSignalCard(signal = signal)
                     }
                 }
 
@@ -333,7 +346,10 @@ private fun OverviewSignalCard(
 }
 
 @Composable
-private fun QuoteOverviewCard(quote: Quote) {
+private fun QuoteOverviewCard(
+    quote: Quote,
+    estimate: Estimate?,
+) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -350,9 +366,22 @@ private fun QuoteOverviewCard(quote: Quote) {
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("基础行情", style = MaterialTheme.typography.titleMedium)
+                Text("正式净值", style = MaterialTheme.typography.titleMedium)
                 FreshnessPill(value = freshnessText(quote.dataFreshness), color = freshnessColor(quote.dataFreshness))
             }
+            LabelWithTooltip(
+                label = quote.sourceLabel,
+                tooltip = buildString {
+                    append("这是当前预测主链路使用的正式净值来源。")
+                    if (quote.qualityFlags.isNotEmpty()) {
+                        append(" 当前检测到：")
+                        append(quote.qualityFlags.joinToString("、"))
+                    } else {
+                        append(" 当前数据质量正常。")
+                    }
+                },
+                labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                 MetricTile(
@@ -380,6 +409,82 @@ private fun QuoteOverviewCard(quote: Quote) {
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            if (quote.qualityFlags.isNotEmpty()) {
+                QualityFlagBlock(
+                    title = "正式净值提示",
+                    flags = quote.qualityFlags,
+                    tooltip = "质量提示用于提醒你当前数据是否存在延迟、异常波动或与上一净值不一致的情况。",
+                )
+            }
+            estimate?.let {
+                EstimateCard(estimate = it)
+            }
+        }
+    }
+}
+
+@Composable
+private fun EstimateCard(estimate: Estimate) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFF8FBFF)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("盘中估值参考", style = MaterialTheme.typography.titleSmall)
+                FreshnessPill(value = freshnessText(estimate.dataFreshness), color = freshnessColor(estimate.dataFreshness))
+            }
+            LabelWithTooltip(
+                label = estimate.sourceLabel,
+                tooltip = "盘中估值只适合作为参考，不等于基金公司最终确认的正式净值。",
+                labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                MetricTile(
+                    modifier = Modifier.weight(1f),
+                    label = "估算净值",
+                    value = String.format("%.3f", estimate.estimateNav),
+                    valueColor = MaterialTheme.colorScheme.onSurface,
+                )
+                MetricTile(
+                    modifier = Modifier.weight(1f),
+                    label = "估算涨跌",
+                    value = signedPercent(estimate.estimateChangePct),
+                    valueColor = numberColor(estimate.estimateChangePct),
+                )
+                MetricTile(
+                    modifier = Modifier.weight(1f),
+                    label = "相对正式净值",
+                    value = estimate.referenceNav?.takeIf { it != 0.0 }?.let { ref ->
+                        signedPercent((estimate.estimateNav - ref) / ref * 100)
+                    } ?: "--",
+                    valueColor = estimate.referenceNav?.takeIf { it != 0.0 }?.let { ref ->
+                        numberColor((estimate.estimateNav - ref) / ref * 100)
+                    } ?: MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Text(
+                "估值时间：${formatAsOf(estimate.asOf)}" +
+                    (estimate.referenceNavAsOf?.let { " · 对比净值：${formatAsOf(it)}" } ?: ""),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (estimate.qualityFlags.isNotEmpty()) {
+                QualityFlagBlock(
+                    title = "盘中估值提示",
+                    flags = estimate.qualityFlags,
+                    tooltip = "当盘中估值更新变慢，或与最近正式净值偏离过大时，会在这里提示你不要过度依赖盘中数值。",
+                )
+            }
         }
     }
 }
@@ -409,6 +514,28 @@ private fun MetricTile(
 }
 
 @Composable
+private fun QualityFlagBlock(
+    title: String,
+    flags: List<String>,
+    tooltip: String,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        LabelWithTooltip(
+            label = title,
+            tooltip = tooltip,
+            labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        flags.forEach { flag ->
+            Text(
+                text = "• $flag",
+                style = MaterialTheme.typography.bodySmall,
+                color = riskFlagColor(flag),
+            )
+        }
+    }
+}
+
+@Composable
 private fun FreshnessPill(value: String, color: Color) {
     Box(
         modifier = Modifier
@@ -416,6 +543,72 @@ private fun FreshnessPill(value: String, color: Color) {
             .padding(horizontal = 10.dp, vertical = 5.dp),
     ) {
         Text(value, style = MaterialTheme.typography.labelMedium, color = color)
+    }
+}
+
+@Composable
+private fun NewsSignalCard(signal: NewsSignal) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Icon(Icons.AutoMirrored.Rounded.Article, contentDescription = "news", tint = MaterialTheme.colorScheme.primary)
+                Text("公告与舆情", style = MaterialTheme.typography.titleMedium)
+            }
+            Text(
+                "最近交易日：${signal.tradeDate}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                MetricTile(
+                    modifier = Modifier.weight(1f),
+                    label = "样本数",
+                    value = "${signal.headlineCount}",
+                    valueColor = MaterialTheme.colorScheme.onSurface,
+                )
+                MetricTile(
+                    modifier = Modifier.weight(1f),
+                    label = "情绪分",
+                    value = String.format("%.2f", signal.sentimentScore),
+                    valueColor = numberColor(signal.sentimentScore),
+                )
+                MetricTile(
+                    modifier = Modifier.weight(1f),
+                    label = "事件分",
+                    value = String.format("%.2f", signal.eventScore),
+                    valueColor = numberColor(signal.eventScore),
+                )
+            }
+            LabelWithTooltip(
+                label = "代表性事件",
+                tooltip = "这一栏会显示当前被系统抽样为最有代表性的公告或外部舆情标题，帮助你判断最近到底发生了什么。",
+                labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                signal.sampleTitle,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                when {
+                    signal.headlineCount == 0 -> "当前没有抓到足够的公告或外部新闻样本，舆情项默认按中性处理。"
+                    signal.sentimentScore > 0.2 || signal.eventScore > 0.2 -> "近期公告与舆情偏利好，更多体现为短中期催化。"
+                    signal.sentimentScore < -0.2 || signal.eventScore < -0.2 -> "近期公告与舆情偏负面，需要结合风险提示审慎看待。"
+                    else -> "近期公告与舆情偏中性，更多还是看市场环境和净值趋势。"
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
 

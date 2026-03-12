@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models.entities import Fund, ModelBacktestReport, NewsSignalDaily, Prediction, Quote, Watchlist
+from app.models.entities import Fund, IntradayEstimate, ModelBacktestReport, NewsSignalDaily, Prediction, Quote, QuoteSourceMeta, Watchlist
 
 
 def seed_data(db: Session) -> None:
@@ -51,6 +51,28 @@ def search_funds(db: Session, q: str) -> list[Fund]:
 def latest_quote(db: Session, code: str) -> Quote | None:
     stmt = select(Quote).where(Quote.fund_code == code).order_by(Quote.as_of.desc()).limit(1)
     return db.scalars(stmt).first()
+
+
+def previous_quote(db: Session, code: str, before_as_of: datetime | None = None) -> Quote | None:
+    stmt = select(Quote).where(Quote.fund_code == code)
+    if before_as_of is not None:
+        stmt = stmt.where(Quote.as_of < before_as_of)
+    stmt = stmt.order_by(Quote.as_of.desc()).limit(1)
+    return db.scalars(stmt).first()
+
+
+def latest_intraday_estimate(db: Session, code: str) -> IntradayEstimate | None:
+    stmt = select(IntradayEstimate).where(IntradayEstimate.fund_code == code).order_by(IntradayEstimate.as_of.desc()).limit(1)
+    return db.scalars(stmt).first()
+
+
+def quote_source_for_as_of(db: Session, code: str, as_of: datetime) -> str | None:
+    stmt = (
+        select(QuoteSourceMeta.source)
+        .where(QuoteSourceMeta.fund_code == code, QuoteSourceMeta.as_of == as_of)
+        .limit(1)
+    )
+    return db.scalar(stmt)
 
 
 def latest_prediction(db: Session, code: str, horizon: str) -> Prediction | None:

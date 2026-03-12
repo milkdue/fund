@@ -10,10 +10,12 @@ import com.leaf.fundpredictor.domain.model.AiJudgement
 import com.leaf.fundpredictor.domain.model.AlertEvent
 import com.leaf.fundpredictor.domain.model.AlertRule
 import com.leaf.fundpredictor.domain.model.DataHealth
+import com.leaf.fundpredictor.domain.model.Estimate
 import com.leaf.fundpredictor.domain.model.Explain
 import com.leaf.fundpredictor.domain.model.ExplainFactor
 import com.leaf.fundpredictor.domain.model.Fund
 import com.leaf.fundpredictor.domain.model.KlineCandle
+import com.leaf.fundpredictor.domain.model.NewsSignal
 import com.leaf.fundpredictor.domain.model.Prediction
 import com.leaf.fundpredictor.domain.model.PredictionChange
 import com.leaf.fundpredictor.domain.model.PredictionChangeFactor
@@ -61,7 +63,36 @@ class FundRepositoryImpl @Inject constructor(
 
     override suspend fun getQuote(code: String): Quote {
         val dto = api.getQuote(code)
-        return Quote(dto.code, dto.asOf, dto.dataFreshness, dto.nav, dto.dailyChangePct, dto.volatility20d)
+        return Quote(
+            code = dto.code,
+            asOf = dto.asOf,
+            dataFreshness = dto.dataFreshness,
+            quoteType = dto.quoteType,
+            source = dto.source,
+            sourceLabel = dto.sourceLabel,
+            qualityStatus = dto.qualityStatus,
+            qualityFlags = dto.qualityFlags,
+            nav = dto.nav,
+            dailyChangePct = dto.dailyChangePct,
+            volatility20d = dto.volatility20d,
+        )
+    }
+
+    override suspend fun getEstimate(code: String): Estimate {
+        val dto = api.getEstimate(code)
+        return Estimate(
+            code = dto.code,
+            asOf = dto.asOf,
+            dataFreshness = dto.dataFreshness,
+            estimateNav = dto.estimateNav,
+            estimateChangePct = dto.estimateChangePct,
+            referenceNav = dto.referenceNav,
+            referenceNavAsOf = dto.referenceNavAsOf,
+            source = dto.source,
+            sourceLabel = dto.sourceLabel,
+            qualityStatus = dto.qualityStatus,
+            qualityFlags = dto.qualityFlags,
+        )
     }
 
     override suspend fun getPrediction(code: String, horizon: String): Prediction {
@@ -159,6 +190,19 @@ class FundRepositoryImpl @Inject constructor(
         }
     }
 
+    override suspend fun getNewsSignal(code: String): NewsSignal {
+        val dto = api.getNewsSignal(code)
+        return NewsSignal(
+            code = dto.code,
+            tradeDate = dto.tradeDate,
+            headlineCount = dto.headlineCount,
+            sentimentScore = dto.sentimentScore,
+            eventScore = dto.eventScore,
+            volumeShock = dto.volumeShock,
+            sampleTitle = dto.sampleTitle,
+        )
+    }
+
     override suspend fun getWatchlist(): List<WatchlistItem> {
         return try {
             val remote = api.getWatchlist()
@@ -199,6 +243,7 @@ class FundRepositoryImpl @Inject constructor(
             fundPoolSize = dto.fundPoolSize,
             quoteCoverage48h = dto.quoteCoverage48h,
             predictionCoverage48h = dto.predictionCoverage48h,
+            latestEstimateAt = dto.latestEstimateAt,
             quoteFreshness = dto.quoteFreshness,
             predictionFreshness = dto.predictionFreshness,
             marketFreshness = dto.marketFreshness,

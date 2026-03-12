@@ -10,9 +10,28 @@ data class Quote(
     val code: String,
     val asOf: String,
     val dataFreshness: String,
+    val quoteType: String,
+    val source: String,
+    val sourceLabel: String,
+    val qualityStatus: String,
+    val qualityFlags: List<String>,
     val nav: Double,
     val dailyChangePct: Double,
     val volatility20d: Double,
+)
+
+data class Estimate(
+    val code: String,
+    val asOf: String,
+    val dataFreshness: String,
+    val estimateNav: Double,
+    val estimateChangePct: Double,
+    val referenceNav: Double?,
+    val referenceNavAsOf: String?,
+    val source: String,
+    val sourceLabel: String,
+    val qualityStatus: String,
+    val qualityFlags: List<String>,
 )
 
 data class Prediction(
@@ -134,10 +153,21 @@ data class DataHealth(
     val fundPoolSize: Int,
     val quoteCoverage48h: Double,
     val predictionCoverage48h: Double,
+    val latestEstimateAt: String?,
     val quoteFreshness: String,
     val predictionFreshness: String,
     val marketFreshness: String,
     val sourceStatus: Map<String, String>,
+)
+
+data class NewsSignal(
+    val code: String,
+    val tradeDate: String,
+    val headlineCount: Int,
+    val sentimentScore: Double,
+    val eventScore: Double,
+    val volumeShock: Double,
+    val sampleTitle: String,
 )
 
 data class AlertEvent(

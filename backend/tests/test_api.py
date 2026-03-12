@@ -1,3 +1,6 @@
+from datetime import datetime
+
+
 def test_healthz(client):
     response = client.get("/healthz")
     assert response.status_code == 200
@@ -13,6 +16,11 @@ def test_end_to_end_read_flow(client):
     code = items[0]["code"]
     quote = client.get(f"/v1/funds/{code}/quote")
     assert quote.status_code == 200
+    assert quote.json()["quote_type"] == "official_nav"
+    assert "quality_status" in quote.json()
+
+    estimate = client.get(f"/v1/funds/{code}/estimate")
+    assert estimate.status_code in {200, 502}
 
     pred = client.get(f"/v1/funds/{code}/predict", params={"horizon": "short"})
     assert pred.status_code == 200
@@ -101,6 +109,27 @@ def test_alert_push_test_endpoint(client, monkeypatch):
         settings.bark_user_key = old_bark_key
 
 
+def test_estimate_endpoint_with_mocked_source(client, monkeypatch):
+    from app.services.intraday_estimate_source import IntradayEstimateSnapshot
+
+    monkeypatch.setattr(
+        "app.api.v1.routes.fetch_intraday_estimate",
+        lambda code: IntradayEstimateSnapshot(
+            code=code,
+            name=f"基金{code}",
+            as_of=datetime(2026, 3, 12, 14, 30),
+            estimate_nav=2.135,
+            estimate_change_pct=1.26,
+        ),
+    )
+    res = client.get("/v1/funds/110022/estimate")
+    assert res.status_code == 200
+    payload = res.json()
+    assert payload["source"] == "eastmoney_fundgz"
+    assert payload["source_label"]
+    assert "quality_status" in payload
+
+
 def test_hot_and_data_sources(client):
     hot = client.get("/v1/funds/hot")
     assert hot.status_code == 200
@@ -115,6 +144,7 @@ def test_hot_and_data_sources(client):
     health = client.get("/v1/system/data-health")
     assert health.status_code == 200
     assert "fund_pool_size" in health.json()
+    assert "latest_estimate_at" in health.json()
 
     walkforward = client.get("/v1/model/backtest/walkforward", params={"horizon": "short"})
     assert walkforward.status_code == 200

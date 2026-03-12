@@ -165,6 +165,44 @@ def _clean_sample_title(title: str | None) -> str | None:
     return cleaned[:80]
 
 
+def _narrative_coverage_note(headline_count: int) -> str:
+    if headline_count <= 0:
+        return "当前没有足够的公告/舆情样本，这一项只能按中性处理。"
+    if headline_count <= 2:
+        return "样本较少，这一项更适合作为辅助判断，不能单独决定方向。"
+    return "样本量尚可，可以辅助判断近期催化剂和情绪方向。"
+
+
+def _direction_framework_note(horizon: str) -> str:
+    if horizon == "short":
+        return "这更偏向短期趋势和预期变化的判断，不直接等于基金长期逻辑已经变强。"
+    return "这更偏向中期趋势和预期修正的判断，能反映方向，但不代表单靠这一项就能下结论。"
+
+
+def _space_framework_note(horizon: str, expected_return_pct: float) -> str:
+    if horizon == "short":
+        if expected_return_pct >= 2.5:
+            return "这更接近短期交易空间判断，说明弹性存在，但不是保证能涨到这个位置。"
+        if expected_return_pct >= 0:
+            return "这更像正常波动区间内的潜在目标，代表有上行空间，但还不算很强。"
+        return "这表示当前赔率偏弱，短期即使反弹，空间也有限。"
+    if expected_return_pct >= 6.0:
+        return "这说明中期有一定修复空间，但仍要结合市场和风险承受能力。"
+    if expected_return_pct >= 0:
+        return "这说明中期存在修复预期，但空间暂时不算特别大。"
+    return "这说明中期赔率偏弱，当前更适合观察而不是主动追高。"
+
+
+def _credibility_framework_note(data_freshness: str, confidence: float) -> str:
+    if data_freshness == "stale":
+        return "数据已经偏旧，这会明显削弱判断可信度。"
+    if confidence < 0.55:
+        return "模型把握本身不高，这一项应当谨慎参考。"
+    if data_freshness == "lagging":
+        return "数据不是最新一轮，适合参考方向，不适合做过度精细的时点决策。"
+    return "数据和模型状态都还可以，这一项可作为较稳定的参考。"
+
+
 def _freshness_text(value: str) -> str:
     lowered = (value or "").lower()
     if lowered == "fresh":
@@ -359,37 +397,41 @@ def build_prediction_scorecard(
             "disagree": "，AI 与量化存在分歧",
         }.get((agreement or "").lower(), "")
     summary = (
-        f"{action_label}，综合评分{total_score}。方向结论：{direction_view}。"
+        f"{action_label}，综合评分{total_score}。方向上看，{direction_view}；"
         f"上涨概率 {up_probability * 100:.2f}%，预期涨跌幅 {expected_return_pct:.2f}%。"
-        f"市场结论：{market_phrase}，{style_phrase}。"
-        f"舆情结论：{narrative_phrase}。{risk_phrase}{ai_phrase}。"
+        f"市场层面属于{market_phrase}、{style_phrase}；"
+        f"催化剂层面{narrative_phrase}。"
+        f"整体上{risk_phrase}{ai_phrase}。"
     )
 
     direction_summary = (
-        f"方向结论：{direction_view}。因为上涨概率 {up_probability * 100:.2f}%"
+        f"方向上看，{direction_view}。当前主要依据是量化上涨概率 {up_probability * 100:.2f}%"
         + (f"、AI 调整后概率 {ai_prob * 100:.2f}%" if ai_payload else "")
-        + f"、{agreement_text if ai_payload else '当前未接入 AI 加权'}，所以方向判断 {int(_clamp(direction_score, 0.0, 100.0))} 分。"
+        + f"、{agreement_text if ai_payload else '当前未接入 AI 加权'}。"
+        f"{_direction_framework_note(horizon)}"
     )
     direction_details = [
         f"方向结论：{direction_view}",
         f"量化上涨概率：{up_probability * 100:.2f}%",
         *( [f"AI 调整后上涨概率：{ai_prob * 100:.2f}%"] if ai_payload else [] ),
         f"一致性判断：{agreement_text}",
+        f"当前更偏向：{'短期趋势/预期变化' if horizon == 'short' else '中期趋势/预期修正'}",
     ]
 
     upside_summary = (
-        f"因为预期涨跌幅 {expected_return_pct:.2f}% 且置信度 {confidence * 100:.2f}%，"
-        f"所以空间收益 {int(_clamp(upside_score, 0.0, 100.0))} 分。"
+        f"空间上，模型预计本周期潜在波动目标约为 {expected_return_pct:.2f}% ，当前置信度 {confidence * 100:.2f}%。"
+        f"{_space_framework_note(horizon, expected_return_pct)}"
     )
     upside_details = [
         f"预期涨跌幅：{expected_return_pct:.2f}%",
         f"量化置信度：{confidence * 100:.2f}%",
         f"评分区间基准：{expected_lower:.1f}% ~ {expected_upper:.1f}%",
+        "说明：这是空间和赔率判断，不等于保底收益",
     ]
 
     market_summary = (
-        f"市场结论：{market_phrase}，{style_phrase}。因为市场环境分 {market_score:.2f}、风格偏好分 {style_score:.2f}，"
-        f"所以市场环境 {int(_clamp(market_component, 0.0, 100.0))} 分。"
+        f"市场层面看，当前属于{market_phrase}，并且{style_phrase}。"
+        f"{_market_implication_text(market_score, style_score)}"
     )
     market_details = [
         f"市场结论：{market_phrase}",
@@ -398,12 +440,13 @@ def build_prediction_scorecard(
         f"市场环境分：{market_score:.2f}",
         f"风格偏好分：{style_score:.2f}",
         f"市场源状态：{'降级' if market_source_degraded else '正常'}",
+        "说明：这一项主要反映大盘和风格环境",
     ]
 
     sample_title = _clean_sample_title(news_sample_title)
     narrative_summary = (
-        f"舆情结论：{narrative_phrase}。因为舆情情绪 {sentiment_score:.2f}、公告事件 {event_score:.2f}、热度冲击 {volume_shock_score:.2f}，"
-        f"所以舆情事件 {int(_clamp(narrative_score, 0.0, 100.0))} 分。"
+        f"催化剂层面，{narrative_phrase}。"
+        f"{_narrative_coverage_note(news_headline_count)}"
     )
     narrative_details = [
         f"舆情结论：{narrative_phrase}",
@@ -413,31 +456,35 @@ def build_prediction_scorecard(
         f"舆情情绪分：{sentiment_score:.2f}",
         f"事件冲击分：{event_score:.2f}",
         f"热度冲击分：{volume_shock_score:.2f}",
+        "说明：这一项主要反映公告、舆情和事件催化",
     ]
 
     risk_summary = (
-        f"因为20日波动率 {volatility_20d:.2f}%"
+        f"风险上，20日波动率 {volatility_20d:.2f}%"
         if volatility_20d is not None
-        else "因为当前缺少波动率数据"
+        else "风险上，当前缺少波动率数据"
     ) + (
-        f"，风险标签 {len(risk_flags)} 个，所以风险控制 {int(_clamp(risk_control_score, 0.0, 100.0))} 分。"
+        f"，可见风险标签 {len(risk_flags)} 个。"
+        f"{'当前回撤和波动风险总体可控。' if risk_score >= 65 else '需要关注波动和回撤风险。'}"
     )
     risk_details = [
         f"风险结论：{'当前波动不大，风险可控' if risk_score >= 65 else '风险处于中等区间' if risk_score >= 45 else '波动和不确定性偏高'}",
         f"20日波动率：{f'{volatility_20d:.2f}%' if volatility_20d is not None else '暂无'}",
         f"风险标签数量：{_risk_flag_count(risk_flags)}",
         f"风险标签：{'、'.join(risk_flags[:3]) if risk_flags else '暂无'}",
+        "说明：这一项主要反映波动和回撤风险",
     ]
 
     credibility_summary = (
-        f"可信度结论：当前数据{_freshness_text(data_freshness)}。因为量化置信度 {confidence * 100:.2f}% 、数据新鲜度 {_freshness_text(data_freshness)}，"
-        f"所以可信度 {int(_clamp(credibility_score, 0.0, 100.0))} 分。"
+        f"可信度上，当前数据{_freshness_text(data_freshness)}，模型置信度 {confidence * 100:.2f}%。"
+        f"{_credibility_framework_note(data_freshness, confidence)}"
     )
     credibility_details = [
         f"可信度结论：{'当前可参考性较好' if credibility_score >= 70 else '当前可参考性一般' if credibility_score >= 45 else '当前可参考性偏弱'}",
         f"量化置信度：{confidence * 100:.2f}%",
         f"数据新鲜度：{_freshness_text(data_freshness)}",
         f"市场数据源：{'降级' if market_source_degraded else '正常'}",
+        "当前未直接覆盖：基金估值分位、真实资金流、完整基本面",
     ]
 
     components = [

@@ -17,9 +17,29 @@ data class QuoteDto(
     val code: String,
     @Json(name = "as_of") val asOf: String,
     @Json(name = "data_freshness") val dataFreshness: String,
+    @Json(name = "quote_type") val quoteType: String = "official_nav",
+    val source: String = "eastmoney_pingzhongdata",
+    @Json(name = "source_label") val sourceLabel: String = "东方财富正式净值",
+    @Json(name = "quality_status") val qualityStatus: String = "ok",
+    @Json(name = "quality_flags") val qualityFlags: List<String> = emptyList(),
     @Json(name = "nav") val nav: Double,
     @Json(name = "daily_change_pct") val dailyChangePct: Double,
     @Json(name = "volatility_20d") val volatility20d: Double,
+)
+
+@JsonClass(generateAdapter = true)
+data class EstimateDto(
+    val code: String,
+    @Json(name = "as_of") val asOf: String,
+    @Json(name = "data_freshness") val dataFreshness: String,
+    @Json(name = "estimate_nav") val estimateNav: Double,
+    @Json(name = "estimate_change_pct") val estimateChangePct: Double,
+    @Json(name = "reference_nav") val referenceNav: Double? = null,
+    @Json(name = "reference_nav_as_of") val referenceNavAsOf: String? = null,
+    val source: String = "eastmoney_fundgz",
+    @Json(name = "source_label") val sourceLabel: String = "东方财富盘中估值",
+    @Json(name = "quality_status") val qualityStatus: String = "ok",
+    @Json(name = "quality_flags") val qualityFlags: List<String> = emptyList(),
 )
 
 @JsonClass(generateAdapter = true)
@@ -163,10 +183,22 @@ data class DataHealthDto(
     @Json(name = "fund_pool_size") val fundPoolSize: Int,
     @Json(name = "quote_coverage_48h") val quoteCoverage48h: Double,
     @Json(name = "prediction_coverage_48h") val predictionCoverage48h: Double,
+    @Json(name = "latest_estimate_at") val latestEstimateAt: String? = null,
     @Json(name = "quote_freshness") val quoteFreshness: String,
     @Json(name = "prediction_freshness") val predictionFreshness: String,
     @Json(name = "market_freshness") val marketFreshness: String,
     @Json(name = "source_status") val sourceStatus: Map<String, String> = emptyMap(),
+)
+
+@JsonClass(generateAdapter = true)
+data class NewsSignalDto(
+    val code: String,
+    @Json(name = "trade_date") val tradeDate: String,
+    @Json(name = "headline_count") val headlineCount: Int,
+    @Json(name = "sentiment_score") val sentimentScore: Double,
+    @Json(name = "event_score") val eventScore: Double,
+    @Json(name = "volume_shock") val volumeShock: Double,
+    @Json(name = "sample_title") val sampleTitle: String,
 )
 
 @JsonClass(generateAdapter = true)
@@ -231,6 +263,9 @@ interface FundApi {
     @GET("funds/{code}/quote")
     suspend fun getQuote(@Path("code") code: String): QuoteDto
 
+    @GET("funds/{code}/estimate")
+    suspend fun getEstimate(@Path("code") code: String): EstimateDto
+
     @GET("funds/{code}/predict")
     suspend fun getPrediction(@Path("code") code: String, @Query("horizon") horizon: String): PredictionDto
 
@@ -245,6 +280,9 @@ interface FundApi {
 
     @GET("funds/{code}/kline")
     suspend fun getKline(@Path("code") code: String, @Query("days") days: Int = 60): KlineDto
+
+    @GET("funds/{code}/news-signal")
+    suspend fun getNewsSignal(@Path("code") code: String): NewsSignalDto
 
     @GET("user/watchlist")
     suspend fun getWatchlist(@Header("X-User-Id") userId: String = "demo-user"): List<WatchlistItemDto>

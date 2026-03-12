@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.core.auth import get_current_user_id
 from app.core.config import settings
 from app.db.session import get_db
-from app.models.entities import AlertEvent, Prediction, PredictionSnapshot
+from app.models.entities import AlertEvent, IntradayEstimate, Prediction, PredictionSnapshot
 from app.schemas.fund import (
     AbCompareItem,
     AbSummaryResponse,
@@ -26,6 +26,7 @@ from app.schemas.fund import (
     DataSourceItem,
     DataSourceResponse,
     DataHealthResponse,
+    EstimateResponse,
     ExplainResponse,
     FeedbackIn,
     FeedbackItem,
@@ -66,16 +67,25 @@ from app.services.predictor import build_risk_flags, confidence_interval, explai
 from app.services.score_service import build_prediction_scorecard, risk_level_from_score
 from app.services.fund_search_source import FundSearchError, FundSearchRateLimitError, remote_search_funds
 from app.services.fund_data_source import FundDataError, fetch_kline_points
+from app.services.intraday_estimate_source import (
+    IntradayEstimateError,
+    IntradayEstimateRateLimitError,
+    fetch_intraday_estimate,
+)
+from app.services.quote_quality_service import evaluate_intraday_estimate_quality, evaluate_official_nav_quality
 from app.services.fund_sync import upsert_funds
 from app.services.hot_funds import hot_rank
 from app.services.prediction_snapshot_service import latest_snapshot
 from app.services.repository import (
     add_watchlist,
     get_watchlist,
+    latest_intraday_estimate,
     latest_backtest_report,
     latest_news_signal,
     latest_prediction,
     latest_quote,
+    previous_quote,
+    quote_source_for_as_of,
     search_funds,
 )
 from app.services.user_ops_service import track_user_event, weekly_user_report, write_api_audit
@@ -108,6 +118,15 @@ def _freshness(as_of: datetime) -> str:
     if delta_hours <= 36:
         return "fresh"
     if delta_hours <= 72:
+        return "lagging"
+    return "stale"
+
+
+def _estimate_freshness(as_of: datetime) -> str:
+    delta_minutes = (shanghai_now_naive() - as_of).total_seconds() / 60
+    if delta_minutes <= 45:
+        return "fresh"
+    if delta_minutes <= 180:
         return "lagging"
     return "stale"
 
@@ -325,13 +344,104 @@ def fund_quote(code: str, db: Session = Depends(get_db)):
             raise HTTPException(status_code=429, detail=f"quote source throttled: {exc}") from exc
         except MarketSyncError as exc:
             raise HTTPException(status_code=502, detail=f"fund data source unavailable: {exc}") from exc
+    prev = previous_quote(db, code, before_as_of=quote.as_of)
+    quote_source = quote_source_for_as_of(db, code, quote.as_of) or "eastmoney_pingzhongdata"
+    quality = evaluate_official_nav_quality(
+        as_of=quote.as_of,
+        nav=quote.nav,
+        daily_change_pct=quote.daily_change_pct,
+        volatility_20d=quote.volatility_20d,
+        source=quote_source,
+        previous_nav=prev.nav if prev else None,
+        previous_as_of=prev.as_of if prev else None,
+    )
     return QuoteResponse(
         code=quote.fund_code,
         as_of=quote.as_of,
         data_freshness=_freshness(quote.as_of),
+        quote_type="official_nav",
+        source=quote_source,
+        source_label=quality.source_label,
+        quality_status=quality.status,
+        quality_flags=quality.flags,
         nav=quote.nav,
         daily_change_pct=quote.daily_change_pct,
         volatility_20d=quote.volatility_20d,
+    )
+
+
+@router.get("/funds/{code}/estimate", response_model=EstimateResponse)
+def fund_estimate(code: str, db: Session = Depends(get_db)):
+    quote = latest_quote(db, code)
+    try:
+        snapshot = fetch_intraday_estimate(code)
+    except IntradayEstimateRateLimitError as exc:
+        raise HTTPException(status_code=429, detail=f"estimate source throttled: {exc}") from exc
+    except IntradayEstimateError:
+        row = latest_intraday_estimate(db, code)
+        if not row:
+            raise HTTPException(status_code=502, detail="intraday estimate unavailable")
+        quality = evaluate_intraday_estimate_quality(
+            as_of=row.as_of,
+            estimate_nav=row.estimate_nav,
+            estimate_change_pct=row.estimate_change_pct,
+            source=row.source,
+            reference_nav=quote.nav if quote else None,
+        )
+        return EstimateResponse(
+            code=row.fund_code,
+            as_of=row.as_of,
+            data_freshness=_estimate_freshness(row.as_of),
+            estimate_nav=row.estimate_nav,
+            estimate_change_pct=row.estimate_change_pct,
+            reference_nav=quote.nav if quote else None,
+            reference_nav_as_of=quote.as_of if quote else None,
+            source=row.source,
+            source_label=quality.source_label,
+            quality_status=quality.status,
+            quality_flags=quality.flags,
+        )
+
+    existing = db.scalar(
+        select(IntradayEstimate).where(
+            IntradayEstimate.fund_code == snapshot.code,
+            IntradayEstimate.as_of == snapshot.as_of,
+        )
+    )
+    if not existing:
+        existing = IntradayEstimate(
+            fund_code=snapshot.code,
+            estimate_nav=snapshot.estimate_nav,
+            estimate_change_pct=snapshot.estimate_change_pct,
+            source=snapshot.source,
+            as_of=snapshot.as_of,
+        )
+        db.add(existing)
+    else:
+        existing.estimate_nav = snapshot.estimate_nav
+        existing.estimate_change_pct = snapshot.estimate_change_pct
+        existing.source = snapshot.source
+    db.commit()
+
+    quality = evaluate_intraday_estimate_quality(
+        as_of=existing.as_of,
+        estimate_nav=existing.estimate_nav,
+        estimate_change_pct=existing.estimate_change_pct,
+        source=existing.source,
+        reference_nav=quote.nav if quote else None,
+    )
+    return EstimateResponse(
+        code=existing.fund_code,
+        as_of=existing.as_of,
+        data_freshness=_estimate_freshness(existing.as_of),
+        estimate_nav=existing.estimate_nav,
+        estimate_change_pct=existing.estimate_change_pct,
+        reference_nav=quote.nav if quote else None,
+        reference_nav_as_of=quote.as_of if quote else None,
+        source=existing.source,
+        source_label=quality.source_label,
+        quality_status=quality.status,
+        quality_flags=quality.flags,
     )
 
 
@@ -1094,22 +1204,37 @@ def data_sources():
         sources=[
             DataSourceItem(
                 name="Eastmoney pingzhongdata",
-                purpose="Fund NAV/Trend",
+                purpose="正式净值与净值趋势",
                 url="https://fund.eastmoney.com/pingzhongdata/{fund_code}.js",
             ),
             DataSourceItem(
+                name="Eastmoney fundgz",
+                purpose="盘中估值参考",
+                url="https://fundgz.1234567.com.cn/js/{fund_code}.js",
+            ),
+            DataSourceItem(
                 name="Eastmoney fundcode_search",
-                purpose="Fund Search Autocomplete",
+                purpose="基金搜索补全",
                 url="https://fund.eastmoney.com/js/fundcode_search.js",
             ),
             DataSourceItem(
                 name="Eastmoney Fund Archives",
-                purpose="Fund Announcement Headlines",
+                purpose="基金公告事件",
                 url="https://fundf10.eastmoney.com/FundArchivesDatas.aspx?type=jjgg&code={fund_code}",
             ),
             DataSourceItem(
+                name="AKShare",
+                purpose="第二净值源/研究回测补充",
+                url="https://akshare.akfamily.xyz",
+            ),
+            DataSourceItem(
+                name="Tavily Search",
+                purpose="第二新闻源/外部舆情搜索",
+                url="https://tavily.com",
+            ),
+            DataSourceItem(
                 name="Eastmoney Index Kline",
-                purpose="Market Regime Factors (HS300/CSI500/CHINEXT)",
+                purpose="市场环境因子（沪深300/中证500/创业板）",
                 url="https://push2his.eastmoney.com/api/qt/stock/kline/get?secid={secid}",
             ),
         ]

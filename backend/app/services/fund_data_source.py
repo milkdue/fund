@@ -7,6 +7,7 @@ from statistics import pstdev
 import httpx
 
 from app.core.config import settings
+from app.services.akshare_source import AkshareSourceError, AkshareUnavailableError, fetch_open_fund_nav_snapshot
 from app.services.source_rate_limiter import RateLimitExceededError, rate_limiter
 from app.services.time_utils import epoch_ms_to_shanghai_naive
 
@@ -21,6 +22,7 @@ class FundMarketSnapshot:
     nav: float
     daily_change_pct: float
     volatility_20d: float
+    source: str = "eastmoney_pingzhongdata"
 
 
 @dataclass
@@ -123,30 +125,52 @@ def _fetch_source_script(code: str, timeout_seconds: float = 8.0) -> str:
 
 
 def fetch_latest_snapshot(code: str, timeout_seconds: float = 8.0) -> FundMarketSnapshot:
-    script = _fetch_source_script(code, timeout_seconds)
-    fund_name = _load_string_value(script, "fS_name")
-    trend = _load_json_value(script, "Data_netWorthTrend")
+    errors: list[str] = []
+    try:
+        script = _fetch_source_script(code, timeout_seconds)
+        fund_name = _load_string_value(script, "fS_name")
+        trend = _load_json_value(script, "Data_netWorthTrend")
 
-    if not trend:
-        raise FundDataError("empty Data_netWorthTrend")
+        if not trend:
+            raise FundDataError("empty Data_netWorthTrend")
 
-    sorted_points = sorted(trend, key=lambda item: item.get("x", 0))
-    net_values = [float(point["y"]) for point in sorted_points if point.get("y") is not None]
-    if not net_values:
-        raise FundDataError("no valid net worth values")
+        sorted_points = sorted(trend, key=lambda item: item.get("x", 0))
+        net_values = [float(point["y"]) for point in sorted_points if point.get("y") is not None]
+        if not net_values:
+            raise FundDataError("no valid net worth values")
 
-    last_point = sorted_points[-1]
-    ts_millis = int(last_point.get("x", 0))
-    as_of = epoch_ms_to_shanghai_naive(ts_millis)
+        last_point = sorted_points[-1]
+        ts_millis = int(last_point.get("x", 0))
+        as_of = epoch_ms_to_shanghai_naive(ts_millis)
 
-    return FundMarketSnapshot(
-        code=code,
-        name=fund_name,
-        as_of=as_of,
-        nav=round(net_values[-1], 4),
-        daily_change_pct=_calc_daily_change(net_values),
-        volatility_20d=_calc_volatility_20d(net_values),
-    )
+        return FundMarketSnapshot(
+            code=code,
+            name=fund_name,
+            as_of=as_of,
+            nav=round(net_values[-1], 4),
+            daily_change_pct=_calc_daily_change(net_values),
+            volatility_20d=_calc_volatility_20d(net_values),
+            source="eastmoney_pingzhongdata",
+        )
+    except FundDataError as exc:
+        errors.append(str(exc))
+
+    if settings.akshare_enabled:
+        try:
+            ak_snapshot = fetch_open_fund_nav_snapshot(code)
+            return FundMarketSnapshot(
+                code=ak_snapshot.code,
+                name=ak_snapshot.name,
+                as_of=ak_snapshot.as_of,
+                nav=ak_snapshot.nav,
+                daily_change_pct=ak_snapshot.daily_change_pct,
+                volatility_20d=ak_snapshot.volatility_20d,
+                source=ak_snapshot.source,
+            )
+        except (AkshareUnavailableError, AkshareSourceError) as exc:
+            errors.append(str(exc))
+
+    raise FundDataError(" | ".join(errors) if errors else "snapshot unavailable")
 
 
 def fetch_kline_points(code: str, days: int = 60, timeout_seconds: float = 8.0) -> list[KlinePoint]:

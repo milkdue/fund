@@ -1,15 +1,17 @@
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models.entities import Fund, NewsSignalDaily, Prediction, Quote
-from app.services.market_context_service import get_or_refresh_market_context
+from app.models.entities import Fund, NewsSignalDaily, Prediction, Quote, QuoteSourceMeta
 from app.services.fund_data_source import FundDataError, FundDataRateLimitError, fetch_latest_snapshot
 from app.services.alerts_service import evaluate_and_record_alert_events
 from app.services.alert_push_service import push_alert_event_to_bark
-from app.services.prediction_ab_service import upsert_ab_result
-from app.services.predictor import candidate_rule_predictions, rule_based_predictions
-from app.services.prediction_snapshot_service import upsert_prediction_snapshot
 from app.core.config import settings
+from app.services.market_context_service import get_or_refresh_market_context
+from app.services.prediction_ab_service import upsert_ab_result
+from app.services.prediction_snapshot_service import upsert_prediction_snapshot
+from app.services.predictor import candidate_rule_predictions, rule_based_predictions
+from app.services.quote_quality_service import evaluate_official_nav_quality
+from app.services.repository import previous_quote
 
 
 class MarketSyncError(Exception):
@@ -27,6 +29,19 @@ def refresh_fund_data(db: Session, code: str) -> Quote:
         raise MarketSyncRateLimitError(str(exc)) from exc
     except FundDataError as exc:
         raise MarketSyncError(str(exc)) from exc
+
+    previous = previous_quote(db, code, before_as_of=snapshot.as_of)
+    quality = evaluate_official_nav_quality(
+        as_of=snapshot.as_of,
+        nav=snapshot.nav,
+        daily_change_pct=snapshot.daily_change_pct,
+        volatility_20d=snapshot.volatility_20d,
+        source=snapshot.source,
+        previous_nav=previous.nav if previous else None,
+        previous_as_of=previous.as_of if previous else None,
+    )
+    if quality.status == "error":
+        raise MarketSyncError(f"official nav quality check failed: {', '.join(quality.flags)}")
 
     fund = db.scalar(select(Fund).where(Fund.code == code))
     if not fund:
@@ -49,6 +64,22 @@ def refresh_fund_data(db: Session, code: str) -> Quote:
         existing_quote.nav = snapshot.nav
         existing_quote.daily_change_pct = snapshot.daily_change_pct
         existing_quote.volatility_20d = snapshot.volatility_20d
+
+    source_meta = db.scalar(
+        select(QuoteSourceMeta).where(
+            QuoteSourceMeta.fund_code == code,
+            QuoteSourceMeta.as_of == snapshot.as_of,
+        )
+    )
+    if not source_meta:
+        source_meta = QuoteSourceMeta(
+            fund_code=code,
+            as_of=snapshot.as_of,
+            source=snapshot.source,
+        )
+        db.add(source_meta)
+    else:
+        source_meta.source = snapshot.source
 
     news_signal = db.scalar(
         select(NewsSignalDaily)
@@ -107,11 +138,12 @@ def refresh_fund_data(db: Session, code: str) -> Quote:
             horizon=horizon,
             as_of=as_of,
             model_version=model_version,
-            data_source="eastmoney_pingzhongdata",
+            data_source=snapshot.source,
             feature_payload={
                 "nav": snapshot.nav,
                 "daily_change_pct": snapshot.daily_change_pct,
                 "volatility_20d": snapshot.volatility_20d,
+                "official_nav_source": snapshot.source,
                 "sentiment_score": sentiment_score,
                 "event_score": event_score,
                 "volume_shock_score": volume_shock_score,

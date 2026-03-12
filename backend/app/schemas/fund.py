@@ -13,9 +13,28 @@ class QuoteResponse(BaseModel):
     code: str
     as_of: datetime
     data_freshness: str = "fresh"
+    quote_type: str = "official_nav"
+    source: str = "eastmoney_pingzhongdata"
+    source_label: str = "东方财富正式净值"
+    quality_status: str = "ok"
+    quality_flags: list[str] = Field(default_factory=list)
     nav: float
     daily_change_pct: float
     volatility_20d: float
+
+
+class EstimateResponse(BaseModel):
+    code: str
+    as_of: datetime
+    data_freshness: str = "fresh"
+    estimate_nav: float
+    estimate_change_pct: float
+    reference_nav: float | None = None
+    reference_nav_as_of: datetime | None = None
+    source: str = "eastmoney_fundgz"
+    source_label: str = "东方财富盘中估值"
+    quality_status: str = "ok"
+    quality_flags: list[str] = Field(default_factory=list)
 
 
 class ScoreComponentResponse(BaseModel):
@@ -272,6 +291,7 @@ class DataHealthResponse(BaseModel):
     prediction_coverage_48h: float = Field(ge=0.0, le=1.0)
     latest_quote_at: datetime | None = None
     latest_prediction_at: datetime | None = None
+    latest_estimate_at: datetime | None = None
     latest_news_trade_date: str | None = None
     latest_market_at: datetime | None = None
     quote_freshness: str

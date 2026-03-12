@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.models.entities import Fund, MarketIndexDaily, NewsSignalDaily, Prediction, Quote
+from app.models.entities import Fund, IntradayEstimate, MarketIndexDaily, NewsSignalDaily, Prediction, Quote
 from app.services.time_utils import shanghai_now_naive
 
 
@@ -26,6 +26,7 @@ def build_data_health_summary(db: Session) -> dict:
 
     latest_quote_ts = db.scalar(select(func.max(Quote.as_of)))
     latest_prediction_ts = db.scalar(select(func.max(Prediction.as_of)))
+    latest_estimate_ts = db.scalar(select(func.max(IntradayEstimate.as_of)))
     latest_news_day = db.scalar(select(func.max(NewsSignalDaily.trade_date)))
     latest_market_ts = db.scalar(select(func.max(MarketIndexDaily.as_of)))
 
@@ -53,6 +54,7 @@ def build_data_health_summary(db: Session) -> dict:
         "prediction_coverage_48h": pred_coverage,
         "latest_quote_at": latest_quote_ts,
         "latest_prediction_at": latest_prediction_ts,
+        "latest_estimate_at": latest_estimate_ts,
         "latest_news_trade_date": latest_news_day.isoformat() if latest_news_day else None,
         "latest_market_at": latest_market_ts,
         "quote_freshness": _freshness_label(latest_quote_ts),
@@ -60,7 +62,10 @@ def build_data_health_summary(db: Session) -> dict:
         "market_freshness": _freshness_label(latest_market_ts),
         "source_status": {
             "eastmoney_nav": "ok" if latest_quote_ts else "degraded",
+            "eastmoney_estimate": "ok" if latest_estimate_ts else "degraded",
             "eastmoney_news": "ok" if latest_news_day else "degraded",
+            "tavily_news": "ok" if latest_news_day else "degraded",
             "eastmoney_market": "ok" if latest_market_ts else "degraded",
+            "akshare_nav": "ok" if latest_quote_ts else "degraded",
         },
     }

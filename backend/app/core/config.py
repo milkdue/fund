@@ -16,9 +16,18 @@ class Settings(BaseSettings):
     auth_user_api_limit_per_min: int = 120
     auth_audit_enabled: bool = True
     source_nav_limit_per_min: int = 90
+    source_estimate_limit_per_min: int = 60
     source_search_limit_per_min: int = 30
     source_news_limit_per_min: int = 20
+    source_tavily_limit_per_min: int = 20
     source_market_limit_per_min: int = 30
+    akshare_enabled: bool = False
+    tavily_enabled: bool = False
+    tavily_api_key: str | None = None
+    tavily_timeout_ms: int = 10000
+    tavily_days: int = 3
+    tavily_max_results: int = 6
+    tavily_search_depth: str = "advanced"
 
     model_short_version: str = "short-v0.1"
     model_mid_version: str = "mid-v0.1"

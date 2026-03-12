@@ -7,9 +7,9 @@ import hashlib
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models.entities import NewsRaw, NewsSignalDaily
+from app.models.entities import Fund, NewsRaw, NewsSignalDaily
+from app.services.news_feed_service import NewsFeedError, NewsFeedRateLimitError, fetch_fund_news_feed
 from app.services.news_sentiment import aggregate_scores, score_headline, volume_shock
-from app.services.news_source import NewsSourceError, NewsSourceRateLimitError, fetch_fund_announcements
 
 
 @dataclass
@@ -136,12 +136,14 @@ def refresh_news_signals_for_code(db: Session, code: str, max_headlines: int = 2
     target_date = trade_date or datetime.now(tz=UTC).date()
     fetched_count = 0
     inserted_count = 0
+    fund = db.scalar(select(Fund).where(Fund.code == code))
+    fund_name = fund.name if fund else None
 
     try:
-        headlines = fetch_fund_announcements(code, limit=max_headlines)
-    except NewsSourceRateLimitError as exc:
+        headlines = fetch_fund_news_feed(code=code, name=fund_name, limit=max_headlines)
+    except NewsFeedRateLimitError as exc:
         raise NewsSyncRateLimitError(str(exc)) from exc
-    except NewsSourceError as exc:
+    except NewsFeedError as exc:
         raise NewsSyncError(str(exc)) from exc
 
     fetched_count = len(headlines)

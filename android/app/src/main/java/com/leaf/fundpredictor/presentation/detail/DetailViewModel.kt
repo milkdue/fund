@@ -5,7 +5,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.leaf.fundpredictor.domain.model.AiJudgement
 import com.leaf.fundpredictor.domain.model.Explain
+import com.leaf.fundpredictor.domain.model.Estimate
 import com.leaf.fundpredictor.domain.model.KlineCandle
+import com.leaf.fundpredictor.domain.model.NewsSignal
 import com.leaf.fundpredictor.domain.model.Prediction
 import com.leaf.fundpredictor.domain.model.PredictionChange
 import com.leaf.fundpredictor.domain.model.Quote
@@ -25,11 +27,13 @@ data class DetailUiState(
     val isWatchlisted: Boolean = false,
     val hasAlertConfigured: Boolean = false,
     val quote: Quote? = null,
+    val estimate: Estimate? = null,
     val shortPred: Prediction? = null,
     val midPred: Prediction? = null,
     val shortAi: AiJudgement? = null,
     val midAi: AiJudgement? = null,
     val explain: Explain? = null,
+    val newsSignal: NewsSignal? = null,
     val shortChange: PredictionChange? = null,
     val kline: List<KlineCandle> = emptyList(),
     val notice: String? = null,
@@ -51,6 +55,8 @@ class DetailViewModel @Inject constructor(
             runCatching {
                 val (quote, shortPred, midPred) = useCase.execute(code)
                 val explain = useCase.explain(code)
+                val estimate = runCatching { repository.getEstimate(code) }.getOrNull()
+                val newsSignal = runCatching { repository.getNewsSignal(code) }.getOrNull()
                 val shortChange = runCatching { repository.getPredictionChange(code, "short") }.getOrNull()
                 val kline = repository.getKline(code, days = 60)
                 val shortAi = runCatching { repository.getAiJudgement(code, "short") }.getOrNull()
@@ -70,11 +76,13 @@ class DetailViewModel @Inject constructor(
                     isWatchlisted = watchlistCodes.contains(code),
                     hasAlertConfigured = alertCodes.contains(code),
                     quote = quote,
+                    estimate = estimate,
                     shortPred = shortPred,
                     midPred = midPred,
                     shortAi = shortAi,
                     midAi = midAi,
                     explain = explain,
+                    newsSignal = newsSignal,
                     shortChange = shortChange,
                     kline = kline,
                 )

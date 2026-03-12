@@ -10,18 +10,22 @@ import com.leaf.fundpredictor.domain.model.WatchlistInsight
 import com.leaf.fundpredictor.domain.model.WatchlistItem
 import com.leaf.fundpredictor.domain.model.AiJudgement
 import com.leaf.fundpredictor.domain.model.DataHealth
+import com.leaf.fundpredictor.domain.model.Estimate
 import com.leaf.fundpredictor.domain.model.AlertEvent
 import com.leaf.fundpredictor.domain.model.AlertRule
+import com.leaf.fundpredictor.domain.model.NewsSignal
 
 interface FundRepository {
     suspend fun searchFunds(query: String): List<Fund>
     suspend fun hotFunds(): List<Fund>
     suspend fun getQuote(code: String): Quote
+    suspend fun getEstimate(code: String): Estimate
     suspend fun getPrediction(code: String, horizon: String): Prediction
     suspend fun getPredictionChange(code: String, horizon: String): PredictionChange
     suspend fun getExplain(code: String, horizon: String): Explain
     suspend fun getAiJudgement(code: String, horizon: String): AiJudgement
     suspend fun getKline(code: String, days: Int = 60): List<KlineCandle>
+    suspend fun getNewsSignal(code: String): NewsSignal
     suspend fun getWatchlist(): List<WatchlistItem>
     suspend fun getWatchlistInsights(): List<WatchlistInsight>
     suspend fun getDataHealth(): DataHealth

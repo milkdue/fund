@@ -350,8 +350,11 @@ private fun freshnessText(value: String): String {
 private fun sourceOrder(key: String): Int {
     return when (key.lowercase()) {
         "eastmoney_nav" -> 1
-        "eastmoney_news" -> 2
-        "eastmoney_market" -> 3
+        "eastmoney_estimate" -> 2
+        "eastmoney_news" -> 3
+        "tavily_news" -> 4
+        "eastmoney_market" -> 5
+        "akshare_nav" -> 6
         else -> 99
     }
 }
@@ -359,8 +362,11 @@ private fun sourceOrder(key: String): Int {
 private fun sourceName(key: String): String {
     return when (key.lowercase()) {
         "eastmoney_nav" -> "净值源"
+        "eastmoney_estimate" -> "盘中估值源"
         "eastmoney_news" -> "公告舆情源"
+        "tavily_news" -> "外部新闻源"
         "eastmoney_market" -> "市场指数源"
+        "akshare_nav" -> "AKShare回退源"
         else -> key
     }
 }
