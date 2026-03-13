@@ -20,8 +20,8 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.Article
 import androidx.compose.material.icons.automirrored.rounded.TrendingUp
 import androidx.compose.material.icons.rounded.AddAlert
-import androidx.compose.material.icons.rounded.Article
 import androidx.compose.material.icons.rounded.NotificationsActive
+import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -107,6 +107,22 @@ fun DetailScreen(code: String, viewModel: DetailViewModel, onBack: () -> Unit) {
                         Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "back")
                     }
                 },
+                actions = {
+                    IconButton(
+                        enabled = !state.loading && !state.refreshing,
+                        onClick = { viewModel.refresh(code) },
+                    ) {
+                        if (state.refreshing) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        } else {
+                            Icon(Icons.Rounded.Refresh, contentDescription = "refresh")
+                        }
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
             )
         }
@@ -128,11 +144,47 @@ fun DetailScreen(code: String, viewModel: DetailViewModel, onBack: () -> Unit) {
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
+                if (state.refreshing) {
+                    MotionReveal(delayMs = 10) {
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F3FF)),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+                        ) {
+                            Text(
+                                "正在刷新最新数据，当前内容已保留。",
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                color = Color(0xFF0C5B9F),
+                            )
+                        }
+                    }
+                }
+
+                state.lastRefreshedAt?.let { refreshedAt ->
+                    MotionReveal(delayMs = 24) {
+                        RefreshStatusCard(
+                            refreshedAt = refreshedAt,
+                            summary = state.refreshSummary,
+                            details = state.refreshDetails,
+                        )
+                    }
+                }
+
                 MotionReveal(delayMs = 40) {
                     OverviewSignalCard(
                         shortPred = state.shortPred,
                         midPred = state.midPred,
                     )
+                }
+
+                if (!state.loading) {
+                    MotionReveal(delayMs = 75) {
+                        DecisionHintCard(
+                            quote = state.quote,
+                            estimate = state.estimate,
+                            shortPred = state.shortPred,
+                            newsSignal = state.newsSignal,
+                        )
+                    }
                 }
 
                 if (!state.loading) {
@@ -294,6 +346,46 @@ fun DetailScreen(code: String, viewModel: DetailViewModel, onBack: () -> Unit) {
                     }
                 }
 
+            }
+        }
+    }
+}
+
+@Composable
+private fun RefreshStatusCard(
+    refreshedAt: String,
+    summary: String?,
+    details: List<String>,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFF8FBFF)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(
+                "上次刷新：$refreshedAt",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            summary?.takeIf { it.isNotBlank() }?.let {
+                Text(
+                    it,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFF0C5B9F),
+                )
+            }
+            details.forEach { line ->
+                Text(
+                    "• $line",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
     }
@@ -577,6 +669,20 @@ private fun NewsSignalCard(signal: NewsSignal) {
                 )
                 MetricTile(
                     modifier = Modifier.weight(1f),
+                    label = "影响强度",
+                    value = newsImpactStrengthText(signal.impactStrength),
+                    valueColor = newsImpactColor(signal.impactStrength),
+                )
+                MetricTile(
+                    modifier = Modifier.weight(1f),
+                    label = "最近事件",
+                    value = newsAgeText(signal.latestAgeDays),
+                    valueColor = newsImpactColor(signal.impactStrength),
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                MetricTile(
+                    modifier = Modifier.weight(1f),
                     label = "情绪分",
                     value = String.format("%.2f", signal.sentimentScore),
                     valueColor = numberColor(signal.sentimentScore),
@@ -587,6 +693,26 @@ private fun NewsSignalCard(signal: NewsSignal) {
                     value = String.format("%.2f", signal.eventScore),
                     valueColor = numberColor(signal.eventScore),
                 )
+                MetricTile(
+                    modifier = Modifier.weight(1f),
+                    label = "热度变化",
+                    value = String.format("%.2f", signal.volumeShock),
+                    valueColor = numberColor(signal.volumeShock),
+                )
+            }
+            signal.latestPublishedAt?.let {
+                Text(
+                    "最新事件时间：${formatAsOf(it)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (signal.impactSummary.isNotBlank()) {
+                Text(
+                    signal.impactSummary,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
             LabelWithTooltip(
                 label = "代表性事件",
@@ -594,20 +720,91 @@ private fun NewsSignalCard(signal: NewsSignal) {
                 labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Text(
-                signal.sampleTitle,
+                if (signal.sampleTitle.isBlank()) "暂无可展示样本" else signal.sampleTitle,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurface,
             )
             Text(
-                when {
-                    signal.headlineCount == 0 -> "当前没有抓到足够的公告或外部新闻样本，舆情项默认按中性处理。"
-                    signal.sentimentScore > 0.2 || signal.eventScore > 0.2 -> "近期公告与舆情偏利好，更多体现为短中期催化。"
-                    signal.sentimentScore < -0.2 || signal.eventScore < -0.2 -> "近期公告与舆情偏负面，需要结合风险提示审慎看待。"
-                    else -> "近期公告与舆情偏中性，更多还是看市场环境和净值趋势。"
-                },
+                newsImpactReading(signal),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+        }
+    }
+}
+
+@Composable
+private fun DecisionHintCard(
+    quote: Quote?,
+    estimate: Estimate?,
+    shortPred: Prediction?,
+    newsSignal: NewsSignal?,
+) {
+    val prediction = shortPred ?: return
+    val headline = when (prediction.scorecard.actionLabel) {
+        "强关注" -> "当前可优先跟踪"
+        "关注" -> "当前可继续跟踪"
+        "观察" -> "当前更适合观察等待"
+        "回避" -> "当前不宜激进操作"
+        else -> "当前建议继续观察"
+    }
+    val suggestions = buildList {
+        add(signalBiasSummary(prediction.scorecard.signalBias, prediction.horizon, prediction.expectedReturnPct))
+        quote?.let {
+            add(
+                when (it.dataFreshness.lowercase()) {
+                    "fresh" -> "正式净值是最新一轮，可作为主判断依据。"
+                    "lagging" -> "正式净值略有延迟，方向可参考，但不适合过度精细择时。"
+                    else -> "正式净值已过期，当前判断要降低信心。"
+                }
+            )
+        }
+        estimate?.referenceNav?.takeIf { it != 0.0 }?.let { ref ->
+            val driftPct = (estimate.estimateNav - ref) / ref * 100
+            add(
+                when {
+                    kotlin.math.abs(driftPct) >= 1.0 -> "盘中估值相对正式净值偏离 ${signedPercent(driftPct)}，盘中波动较明显。"
+                    kotlin.math.abs(driftPct) >= 0.35 -> "盘中估值相对正式净值偏离 ${signedPercent(driftPct)}，可继续观察盘中方向是否延续。"
+                    else -> "盘中估值与正式净值差异不大，日内情绪暂未明显偏离。"
+                }
+            )
+        }
+        newsSignal?.let {
+            add(
+                when (it.impactStrength.lowercase()) {
+                    "strong" -> "最近舆情影响较强，需要把事件催化一起纳入判断。"
+                    "medium" -> "最近有一定事件影响，但还不足以单独决定方向。"
+                    "weak" -> "最近舆情影响较弱，主判断仍应回到净值趋势和市场环境。"
+                    else -> "当前缺少足够的新事件样本，舆情项按中性看待。"
+                }
+            )
+        }
+    }.take(4)
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFF8FBFF)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text("当前判断提示", style = MaterialTheme.typography.titleMedium)
+            Text(
+                headline,
+                style = MaterialTheme.typography.titleSmall,
+                color = actionColor(prediction.scorecard.actionLabel),
+            )
+            suggestions.forEach { tip ->
+                Text(
+                    text = "• $tip",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }
@@ -1191,6 +1388,50 @@ private fun componentColor(score: Int): Color {
         score >= 55 -> Color(0xFF0C5B9F)
         score >= 40 -> Color(0xFFB26A00)
         else -> Color(0xFFC62828)
+    }
+}
+
+private fun newsImpactStrengthText(value: String): String {
+    return when (value.lowercase()) {
+        "strong" -> "强"
+        "medium" -> "中"
+        "weak" -> "弱"
+        else -> "中性"
+    }
+}
+
+private fun newsImpactColor(value: String): Color {
+    return when (value.lowercase()) {
+        "strong" -> Color(0xFF0B8A43)
+        "medium" -> Color(0xFF0C5B9F)
+        "weak" -> Color(0xFFB26A00)
+        else -> Color(0xFF70757F)
+    }
+}
+
+private fun newsAgeText(value: Double?): String {
+    if (value == null) return "暂无"
+    return when {
+        value < 1.0 -> "1天内"
+        value <= 2.0 -> "2天内"
+        else -> "${String.format("%.1f", value)}天"
+    }
+}
+
+private fun newsImpactReading(signal: NewsSignal): String {
+    if (signal.headlineCount == 0) {
+        return "当前没有抓到足够的公告或外部新闻样本，舆情项默认按中性处理。"
+    }
+    return buildString {
+        append(signal.impactSummary.ifBlank { "当前新闻影响暂按中性理解。" })
+        append(
+            when (signal.impactStrength.lowercase()) {
+                "strong" -> " 这类信号更适合作为短期催化一起看。"
+                "medium" -> " 这类信号可以辅助判断，但不适合单独决定方向。"
+                "weak" -> " 这类信号已经在衰减，主判断仍应看趋势和市场。"
+                else -> " 当前仍应以净值趋势和市场环境为主。"
+            }
+        )
     }
 }
 

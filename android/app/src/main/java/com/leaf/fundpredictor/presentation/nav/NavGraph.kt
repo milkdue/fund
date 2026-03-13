@@ -155,6 +155,7 @@ fun FundNavGraph(
                     onOpenWatchlist = { navigateTab(Route.Watchlist) },
                     onOpenAlerts = { navigateTab(Route.Alerts) },
                     onOpenLearn = { navController.navigate(Route.Learn) },
+                    onOpenDetail = { code -> navController.navigate("detail/$code") },
                 )
             }
 

@@ -168,6 +168,10 @@ data class NewsSignal(
     val eventScore: Double,
     val volumeShock: Double,
     val sampleTitle: String,
+    val latestPublishedAt: String?,
+    val latestAgeDays: Double?,
+    val impactStrength: String,
+    val impactSummary: String,
 )
 
 data class AlertEvent(

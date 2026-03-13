@@ -199,6 +199,10 @@ data class NewsSignalDto(
     @Json(name = "event_score") val eventScore: Double,
     @Json(name = "volume_shock") val volumeShock: Double,
     @Json(name = "sample_title") val sampleTitle: String,
+    @Json(name = "latest_published_at") val latestPublishedAt: String? = null,
+    @Json(name = "latest_age_days") val latestAgeDays: Double? = null,
+    @Json(name = "impact_strength") val impactStrength: String = "neutral",
+    @Json(name = "impact_summary") val impactSummary: String = "",
 )
 
 @JsonClass(generateAdapter = true)

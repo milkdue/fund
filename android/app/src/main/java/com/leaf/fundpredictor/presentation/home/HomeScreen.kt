@@ -1,6 +1,7 @@
 package com.leaf.fundpredictor.presentation.home
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,6 +15,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.TrendingUp
 import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material.icons.rounded.QueryStats
+import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.School
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material3.Card
@@ -21,12 +23,14 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -36,6 +40,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.leaf.fundpredictor.domain.model.WatchlistInsight
 import com.leaf.fundpredictor.presentation.components.LabelWithTooltip
 import com.leaf.fundpredictor.domain.model.DataHealth
 import com.leaf.fundpredictor.presentation.components.MotionReveal
@@ -48,6 +53,7 @@ fun HomeScreen(
     onOpenWatchlist: () -> Unit,
     onOpenAlerts: () -> Unit,
     onOpenLearn: () -> Unit,
+    onOpenDetail: (String) -> Unit,
 ) {
     val state by viewModel.uiState.collectAsState()
 
@@ -65,6 +71,22 @@ fun HomeScreen(
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                    }
+                },
+                actions = {
+                    IconButton(
+                        enabled = !state.loading && !state.refreshing,
+                        onClick = { viewModel.refresh() },
+                    ) {
+                        if (state.refreshing) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.padding(4.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        } else {
+                            Icon(Icons.Rounded.Refresh, contentDescription = "refresh")
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
@@ -88,6 +110,31 @@ fun HomeScreen(
                     .padding(horizontal = 16.dp, vertical = 10.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
+                if (state.refreshing) {
+                    MotionReveal(delayMs = 10) {
+                        Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F3FF))) {
+                            Text(
+                                text = "正在刷新首页数据，当前内容已保留。",
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                color = Color(0xFF0C5B9F),
+                            )
+                        }
+                    }
+                }
+
+                state.lastRefreshedAt?.let { refreshedAt ->
+                    MotionReveal(delayMs = 16) {
+                        Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFF8FBFF))) {
+                            Text(
+                                text = "上次刷新：$refreshedAt",
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+
                 MotionReveal(delayMs = 30) {
                     StrategyBoardCard(health = state.dataHealth)
                 }
@@ -98,6 +145,17 @@ fun HomeScreen(
                     }
                     MotionReveal(delayMs = 80) {
                         SourceStatusCard(health = health)
+                    }
+                }
+
+                if (state.topInsights.isNotEmpty()) {
+                    MotionReveal(delayMs = 92) {
+                        TopInsightsCard(
+                            items = state.topInsights,
+                            alertFundCodes = state.alertFundCodes,
+                            onOpenDetail = onOpenDetail,
+                            onOpenWatchlist = onOpenWatchlist,
+                        )
                     }
                 }
 
@@ -137,6 +195,143 @@ fun HomeScreen(
                 Box(modifier = Modifier.padding(bottom = 16.dp))
             }
         }
+    }
+}
+
+@Composable
+private fun TopInsightsCard(
+    items: List<WatchlistInsight>,
+    alertFundCodes: Set<String>,
+    onOpenDetail: (String) -> Unit,
+    onOpenWatchlist: () -> Unit,
+) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text("今日优先关注", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "从自选池里挑出当前最值得先看的 3 只",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                FilledTonalButton(onClick = onOpenWatchlist) {
+                    Icon(Icons.Rounded.Star, contentDescription = "watchlist")
+                    Text("查看自选", modifier = Modifier.padding(start = 6.dp))
+                }
+            }
+            items.forEachIndexed { index, item ->
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onOpenDetail(item.fundCode) },
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFF7FAFF)),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(3.dp),
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text(
+                                    "#${index + 1} ${item.fundCode}",
+                                    style = MaterialTheme.typography.titleSmall,
+                                )
+                                if (alertFundCodes.contains(item.fundCode)) {
+                                    MiniTag(
+                                        text = "已提醒",
+                                        bg = Color(0xFFE6F7F1),
+                                        fg = Color(0xFF126A57),
+                                    )
+                                }
+                            }
+                            Text(
+                                "${item.actionLabel} · ${item.signal} · ${freshnessText(item.dataFreshness)}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = actionColor(item.actionLabel),
+                            )
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                topInsightReasons(item).forEach { reason ->
+                                    TopReasonTag(reason = reason)
+                                }
+                            }
+                            if (item.scoreSummary.isNotBlank()) {
+                                Text(
+                                    item.scoreSummary,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                        Column(
+                            horizontalAlignment = Alignment.End,
+                            verticalArrangement = Arrangement.spacedBy(3.dp),
+                        ) {
+                            Text(
+                                "短期 ${item.shortScore?.toString() ?: "--"}",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = actionColor(item.actionLabel),
+                            )
+                            Text(
+                                "中期 ${item.midScore?.toString() ?: "--"}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MiniTag(
+    text: String,
+    bg: Color,
+    fg: Color,
+) {
+    Box(
+        modifier = Modifier
+            .background(bg, shape = MaterialTheme.shapes.small)
+            .padding(horizontal = 7.dp, vertical = 3.dp),
+    ) {
+        Text(text, style = MaterialTheme.typography.labelSmall, color = fg)
+    }
+}
+
+@Composable
+private fun TopReasonTag(reason: String) {
+    Box(
+        modifier = Modifier
+            .background(Color(0xFFE8F1FF), shape = MaterialTheme.shapes.small)
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+    ) {
+        Text(
+            reason,
+            style = MaterialTheme.typography.labelMedium,
+            color = Color(0xFF0C5B9F),
+        )
     }
 }
 
@@ -256,6 +451,38 @@ private fun SourceStatusCard(health: DataHealth) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
+}
+
+private fun actionColor(label: String): Color {
+    return when (label) {
+        "强关注" -> Color(0xFF0B8A43)
+        "关注" -> Color(0xFF126A57)
+        "观察" -> Color(0xFFB26A00)
+        "回避" -> Color(0xFFC62828)
+        else -> Color(0xFF596072)
+    }
+}
+
+private fun topInsightReasons(item: WatchlistInsight): List<String> {
+    val reasons = buildList {
+        if ((item.shortScore ?: 0) >= 75 || (item.midScore ?: 0) >= 75) {
+            add("评分高")
+        } else if ((item.shortScore ?: 0) >= 60 || (item.midScore ?: 0) >= 60) {
+            add("分数稳")
+        }
+        if (item.signal.contains("偏多")) {
+            add("方向偏多")
+        } else if (item.signal.contains("震荡")) {
+            add("方向待确认")
+        }
+        if (item.riskLevel.lowercase() == "low") {
+            add("风险较低")
+        }
+        if (item.dataFreshness.lowercase() == "fresh") {
+            add("数据新鲜")
+        }
+    }
+    return reasons.take(2).ifEmpty { listOf("持续跟踪") }
 }
 
 @Composable

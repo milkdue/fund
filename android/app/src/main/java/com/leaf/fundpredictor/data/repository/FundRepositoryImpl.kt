@@ -200,6 +200,10 @@ class FundRepositoryImpl @Inject constructor(
             eventScore = dto.eventScore,
             volumeShock = dto.volumeShock,
             sampleTitle = dto.sampleTitle,
+            latestPublishedAt = dto.latestPublishedAt,
+            latestAgeDays = dto.latestAgeDays,
+            impactStrength = dto.impactStrength,
+            impactSummary = dto.impactSummary,
         )
     }
 

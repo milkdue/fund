@@ -8,22 +8,29 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.TrendingUp
 import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material.icons.rounded.NotificationsNone
+import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -56,6 +63,36 @@ fun WatchlistScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
     var scoreSheet by remember { mutableStateOf<WatchlistScoreSheetState?>(null) }
+    var filter by remember { mutableStateOf(WatchlistFilter.All) }
+    val filteredInsights = remember(state.insights, state.alertFundCodes, filter) {
+        state.insights.filter { insight ->
+            when (filter) {
+                WatchlistFilter.All -> true
+                WatchlistFilter.Focus -> insight.actionLabel in setOf("强关注", "关注")
+                WatchlistFilter.AlertFocus -> state.alertFundCodes.contains(insight.fundCode) && insight.actionLabel in setOf("强关注", "关注")
+                WatchlistFilter.MissingAlert -> !state.alertFundCodes.contains(insight.fundCode)
+                WatchlistFilter.Stale -> insight.dataFreshness.lowercase() != "fresh"
+            }
+        }
+    }
+    val filteredItems = remember(state.items, state.alertFundCodes, filter) {
+        state.items.filter { item ->
+            when (filter) {
+                WatchlistFilter.All -> true
+                WatchlistFilter.AlertFocus -> state.alertFundCodes.contains(item.fundCode)
+                WatchlistFilter.MissingAlert -> !state.alertFundCodes.contains(item.fundCode)
+                WatchlistFilter.Focus -> true
+                WatchlistFilter.Stale -> true
+            }
+        }
+    }
+    val highlights = remember(state.insights, state.items, state.alertFundCodes) {
+        deriveWatchlistHighlights(
+            insights = state.insights,
+            items = state.items,
+            alertFundCodes = state.alertFundCodes,
+        )
+    }
 
     LaunchedEffect(Unit) { viewModel.load() }
 
@@ -67,6 +104,22 @@ fun WatchlistScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "back")
+                    }
+                },
+                actions = {
+                    IconButton(
+                        enabled = !state.loading && !state.refreshing,
+                        onClick = { viewModel.refresh() },
+                    ) {
+                        if (state.refreshing) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.padding(4.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        } else {
+                            Icon(Icons.Rounded.Refresh, contentDescription = "refresh")
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
@@ -89,8 +142,42 @@ fun WatchlistScreen(
                     .padding(horizontal = 16.dp, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
+                if (state.refreshing) {
+                    MotionReveal(delayMs = 12) {
+                        Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F3FF))) {
+                            Text(
+                                "正在刷新自选洞察，当前内容已保留。",
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                color = Color(0xFF0C5B9F),
+                            )
+                        }
+                    }
+                }
+
+                state.lastRefreshedAt?.let { refreshedAt ->
+                    MotionReveal(delayMs = 18) {
+                        Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFF8FBFF))) {
+                            Text(
+                                "上次刷新：$refreshedAt",
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+
                 MotionReveal(delayMs = 40) {
-                    OverviewCard(size = maxOf(state.insights.size, state.items.size))
+                    OverviewCard(highlights = highlights)
+                }
+
+                MotionReveal(delayMs = 60) {
+                    FilterBar(
+                        current = filter,
+                        displayedCount = if (state.insights.isNotEmpty()) filteredInsights.size else filteredItems.size,
+                        totalCount = maxOf(state.insights.size, state.items.size),
+                        onSelect = { filter = it },
+                    )
                 }
 
                 state.diagnosticsNote?.let { note ->
@@ -117,14 +204,39 @@ fun WatchlistScreen(
                     }
                 }
 
+                if (!state.loading && state.insights.isNotEmpty() && filteredInsights.isEmpty()) {
+                    MotionReveal(delayMs = 126) {
+                        Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+                            Text(
+                                "当前筛选下没有结果，换一个筛选条件试试。",
+                                modifier = Modifier.padding(14.dp),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+
+                if (!state.loading && state.insights.isEmpty() && state.items.isNotEmpty() && filteredItems.isEmpty()) {
+                    MotionReveal(delayMs = 126) {
+                        Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+                            Text(
+                                "当前筛选下没有自选项可展示。",
+                                modifier = Modifier.padding(14.dp),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+
                 LazyColumn(
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     if (state.insights.isNotEmpty()) {
-                        itemsIndexed(state.insights, key = { _, item -> item.fundCode }) { index, item ->
+                        itemsIndexed(filteredInsights, key = { _, item -> item.fundCode }) { index, item ->
                             MotionReveal(delayMs = 140 + (index.coerceAtMost(8) * 35)) {
                                 WatchlistInsightCard(
+                                    rank = index + 1,
                                     item = item,
                                     hasAlert = state.alertFundCodes.contains(item.fundCode),
                                     onOpenShortScore = {
@@ -155,7 +267,7 @@ fun WatchlistScreen(
                             }
                         }
                     } else {
-                        itemsIndexed(state.items, key = { _, item -> item.fundCode }) { index, item ->
+                        itemsIndexed(filteredItems, key = { _, item -> item.fundCode }) { index, item ->
                             MotionReveal(delayMs = 140 + (index.coerceAtMost(8) * 35)) {
                                 WatchlistItemCard(
                                     item = item,
@@ -184,37 +296,149 @@ private data class WatchlistScoreSheetState(
     val scorecard: ScoreCard,
 )
 
+private enum class WatchlistFilter(val label: String) {
+    All("全部"),
+    Focus("优先看"),
+    AlertFocus("已提醒重点"),
+    MissingAlert("未设提醒"),
+    Stale("数据滞后"),
+}
+
+private data class WatchlistHighlights(
+    val totalCount: Int,
+    val focusCount: Int,
+    val alertedFocusCount: Int,
+    val missingAlertCount: Int,
+    val staleCount: Int,
+)
+
 @Composable
-private fun OverviewCard(size: Int) {
+private fun OverviewCard(highlights: WatchlistHighlights) {
     Card(
         colors = CardDefaults.cardColors(containerColor = Color(0xFF0E3A66)),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
     ) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 14.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("关注数量", color = Color.White.copy(alpha = 0.8f))
-                Text("$size", style = MaterialTheme.typography.headlineMedium, color = Color.White)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("关注数量", color = Color.White.copy(alpha = 0.8f))
+                    Text("${highlights.totalCount}", style = MaterialTheme.typography.headlineMedium, color = Color.White)
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.AutoMirrored.Rounded.TrendingUp, contentDescription = "trend", tint = Color(0xFF9ED1FF))
+                    Text(
+                        "持续跟踪",
+                        modifier = Modifier.padding(start = 6.dp),
+                        color = Color.White.copy(alpha = 0.9f),
+                    )
+                }
             }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.AutoMirrored.Rounded.TrendingUp, contentDescription = "trend", tint = Color(0xFF9ED1FF))
-                Text(
-                    "持续跟踪",
-                    modifier = Modifier.padding(start = 6.dp),
-                    color = Color.White.copy(alpha = 0.9f),
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OverviewStatTile(
+                    modifier = Modifier.weight(1f),
+                    label = "优先看",
+                    value = "${highlights.focusCount}",
+                    valueColor = Color(0xFF9EF1C6),
                 )
+                OverviewStatTile(
+                    modifier = Modifier.weight(1f),
+                    label = "已提醒重点",
+                    value = "${highlights.alertedFocusCount}",
+                    valueColor = Color(0xFFA9D5FF),
+                )
+                OverviewStatTile(
+                    modifier = Modifier.weight(1f),
+                    label = "未设提醒",
+                    value = "${highlights.missingAlertCount}",
+                    valueColor = Color(0xFFFFD08A),
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OverviewStatTile(
+                    modifier = Modifier.weight(1f),
+                    label = "数据滞后",
+                    value = "${highlights.staleCount}",
+                    valueColor = Color(0xFFFFA9A1),
+                )
+                Box(modifier = Modifier.weight(1f).height(1.dp))
+                Box(modifier = Modifier.weight(1f).height(1.dp))
             }
         }
     }
 }
 
 @Composable
+private fun OverviewStatTile(
+    modifier: Modifier = Modifier,
+    label: String,
+    value: String,
+    valueColor: Color,
+) {
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.08f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(3.dp),
+        ) {
+            Text(label, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.78f))
+            Text(value, style = MaterialTheme.typography.titleMedium, color = valueColor)
+        }
+    }
+}
+
+@Composable
+private fun FilterBar(
+    current: WatchlistFilter,
+    displayedCount: Int,
+    totalCount: Int,
+    onSelect: (WatchlistFilter) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            WatchlistFilter.entries.forEach { item ->
+                FilterChip(
+                    selected = current == item,
+                    onClick = { onSelect(item) },
+                    label = { Text(item.label) },
+                )
+            }
+        }
+        Text(
+            "当前展示 $displayedCount / $totalCount",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
 private fun WatchlistInsightCard(
+    rank: Int,
     item: WatchlistInsight,
     hasAlert: Boolean,
     onOpenShortScore: () -> Unit,
@@ -241,7 +465,10 @@ private fun WatchlistInsightCard(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Text(item.fundCode, style = MaterialTheme.typography.titleMedium)
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(item.fundCode, style = MaterialTheme.typography.titleMedium)
+                        RankTag(rank = rank, actionLabel = item.actionLabel)
+                    }
                     Text(
                         "信号: ${item.signal} · ${item.actionLabel}",
                         style = MaterialTheme.typography.bodySmall,
@@ -310,6 +537,23 @@ private fun WatchlistInsightCard(
                 color = freshnessColor(item.dataFreshness),
             )
         }
+    }
+}
+
+@Composable
+private fun RankTag(rank: Int, actionLabel: String) {
+    val color = actionLabelColor(actionLabel)
+    Row(
+        modifier = Modifier
+            .background(color.copy(alpha = 0.12f), shape = MaterialTheme.shapes.small)
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = "优先级 #$rank",
+            style = MaterialTheme.typography.labelMedium,
+            color = color,
+        )
     }
 }
 
@@ -548,6 +792,29 @@ private fun signalColor(value: String): Color {
         value.contains("偏空") -> Color(0xFFC62828)
         else -> Color(0xFF596072)
     }
+}
+
+private fun deriveWatchlistHighlights(
+    insights: List<WatchlistInsight>,
+    items: List<WatchlistItem>,
+    alertFundCodes: Set<String>,
+): WatchlistHighlights {
+    if (insights.isNotEmpty()) {
+        return WatchlistHighlights(
+            totalCount = insights.size,
+            focusCount = insights.count { it.actionLabel in setOf("强关注", "关注") },
+            alertedFocusCount = insights.count { it.actionLabel in setOf("强关注", "关注") && alertFundCodes.contains(it.fundCode) },
+            missingAlertCount = insights.count { !alertFundCodes.contains(it.fundCode) },
+            staleCount = insights.count { it.dataFreshness.lowercase() != "fresh" },
+        )
+    }
+    return WatchlistHighlights(
+        totalCount = items.size,
+        focusCount = 0,
+        alertedFocusCount = items.count { alertFundCodes.contains(it.fundCode) },
+        missingAlertCount = items.count { !alertFundCodes.contains(it.fundCode) },
+        staleCount = 0,
+    )
 }
 
 private fun freshnessText(value: String): String {
